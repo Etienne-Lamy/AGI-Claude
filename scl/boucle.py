@@ -1,0 +1,323 @@
+"""Boucle SCL — assemblage final (Phase 11) : cycle jour/nuit, persistance.
+
+Chemin unique : l'ancien fork `CONFIG["pilotage_chantiers"]` et la couche
+d'instrumentation "barreaux" (`evaluer_barreau1`, `calculer_barreaux`,
+`deliberer_options`, `meilleure_projection`) sont abandonnés — ni l'un ni
+l'autre n'appartenait à la spécification v6 ; le chemin structurel
+(rupture → réparation → composition → création, §4.5) est le seul retenu.
+
+`EtatSCL` rassemble tous les composants construits UNE FOIS par `main_loop`
+(discriminateur, encodeur, décodeur, V_ψ...) et transportés explicitement —
+jamais recréés en cours de route (§0)."""
+import time
+
+import torch
+
+from .attention import (
+    AccumulateurOrchestrateur, PointerNetwork, SetTransformer, construire_T_t,
+    entrainer_pointeurs, macro_pas,
+)
+from . import checkpoint as checkpoint_mod
+from .config import CONFIG
+from .credit import amorcage_creation, regret_composition, rejeu_contrefactuel_nocturne
+from .decision_action import priorisation_besoin_dominant
+from .disponibilite import logique_acceptation
+from .inne import construire_graphe_inne, reflexe_frein
+from .logger import log, log_verbeux, set_temps
+from .memoires import (
+    MemoireExceptions, MemoireTampon, RegistreCablage, RegistreDisponibilite,
+    RegistreProvenance, RegistreRupture, TableBesoins, TableContexte,
+)
+from .monde import ACCELERATIONS_PERMISES, Monde
+from .recherche import ValeurApprise
+from .statistiques import sprt_drift
+from .utils import ajuster_dim
+
+
+class EtatSCL:
+    """Conteneur de l'état complet transporté par la boucle jour/nuit."""
+
+    def __init__(self, graphe, discriminateur, monde, table_besoins):
+        self.graphe = graphe
+        self.discriminateur = discriminateur
+        self.monde = monde
+        self.table_besoins = table_besoins
+        self.table_contexte = TableContexte()
+        self.memoire_tampon = MemoireTampon()
+        self.memoire_exceptions = MemoireExceptions()
+        self.registre_cablage = RegistreCablage()
+        self.registre_rupture = RegistreRupture()
+        self.registre_disponibilite = RegistreDisponibilite()
+        self.registre_provenance = RegistreProvenance()
+        self.encodeur = SetTransformer()
+        self.decodeur = PointerNetwork()
+        self.valeur_apprise = ValeurApprise()
+        self.accumulateur_orchestrateur = AccumulateurOrchestrateur()
+        self.jeu_apprentissage_gating = []
+        self.trace_precedente = None
+
+
+def sauvegarder_etat(chemin, etat):
+    checkpoint_mod.sauvegarder(chemin, **etat.__dict__)
+
+
+def charger_etat(chemin):
+    composants = checkpoint_mod.charger(chemin)
+    etat = EtatSCL.__new__(EtatSCL)
+    etat.__dict__.update(composants)
+    return etat
+
+
+# ------------------------------------------------------------- contexte / capteurs
+
+def construire_contexte_enrichi(contexte_t, table_besoins, erreur_globale):
+    """Résumé fixe du contexte (composante F_t^ctx) : vision moyennée par
+    ligne, proprioception, besoins, erreur globale — un vecteur de taille
+    `CONFIG["dim_contexte"]`."""
+    vision = torch.as_tensor(contexte_t["vision"][-1], dtype=torch.float32)
+    vision_pool = vision.mean(dim=0)
+    proprio = torch.as_tensor(contexte_t["proprio"], dtype=torch.float32)
+    besoins_vec = torch.tensor(list(table_besoins.etats.values()), dtype=torch.float32)
+    brut = torch.cat([vision_pool, proprio, besoins_vec, torch.tensor([float(erreur_globale)])])
+    return ajuster_dim(brut, CONFIG["dim_contexte"])
+
+
+def inputs_bruts(contexte_t):
+    """Capteurs bruts en tenseurs (composante physique de F_t^ptr)."""
+    return {
+        "vision": torch.as_tensor(contexte_t["vision"][-1], dtype=torch.float32),
+        "proprio": torch.as_tensor(contexte_t["proprio"], dtype=torch.float32),
+    }
+
+
+# --------------------------------------------------------- sélection d'action (§15)
+
+def _valeur_action_faim(accel, monde):
+    sucres, _ = monde.objets_visibles()
+    if not sucres:
+        return 0.0
+    cible = min(sucres, key=lambda d: d[0] ** 2 + d[1] ** 2)
+    norme = (cible[0] ** 2 + cible[1] ** 2) ** 0.5 or 1.0
+    return (accel[0] * cible[0] + accel[1] * cible[1]) / norme
+
+
+def _valeur_action_ennui(accel, monde):
+    return 1.0 if accel != (0, 0) else 0.0
+
+
+def _scores_actions(monde, besoins):
+    """[Non résolu, marqué explicitement par la théorie elle-même, §15.3] :
+    génération d'actions candidates à horizon >1 — implémentation POC
+    minimale (rollout à horizon 0, heuristique directe), affinable sans
+    changer l'interface de `decision_action.priorisation_besoin_dominant`."""
+    candidats = list(ACCELERATIONS_PERMISES)
+    return {
+        "faim": {a: _valeur_action_faim(a, monde) for a in candidats},
+        "ennui": {a: _valeur_action_ennui(a, monde) for a in candidats},
+    }
+
+
+# ------------------------------------------------------------- entraînement local
+
+def _entrainer_localement(etat, contexte_t, inputs, ctx_vec, commande_choisie, t):
+    g = etat.graphe
+    champ = inputs["vision"]
+
+    if "vision" in g.modules:
+        m = g.modules["vision"]
+        e = m.entrainer_masque(champ, t=t)
+        m.mettre_a_jour_condensateurs(erreur_reco=e, erreur_gen=e)
+        etat.registre_disponibilite.ajouter("vision", ctx_vec, e)
+        etat.memoire_tampon.ajouter_reco("vision", champ, champ, e, t, contexte=ctx_vec)
+        g.noter_erreur(e)
+
+    if "proprio" in g.modules:
+        m = g.modules["proprio"]
+        decision = logique_acceptation(m, m.dernier_latent, inputs["proprio"], voie="gen")
+        etat.registre_disponibilite.ajouter("proprio", ctx_vec, m.friction_recente())
+        log_verbeux("boucle", "entrainement_proprio", decision=decision)
+
+    if "integration" in g.modules and "vision" in g.modules and "proprio" in g.modules:
+        m = g.modules["integration"]
+        cible = g.entree_detachee([g.modules["vision"].dernier_latent,
+                                   g.modules["proprio"].dernier_latent])
+        e = m.entrainer_module_reco(cible, m.dernier_latent if m.dernier_latent is not None
+                                    else torch.zeros(m.n_latent), contexte_vec=ctx_vec, t=t)
+        m.mettre_a_jour_condensateurs(erreur_reco=e)
+        etat.registre_disponibilite.ajouter("integration", ctx_vec, e)
+
+    if "action" in g.modules and "integration" in g.modules:
+        m = g.modules["action"]
+        latent_int = g.modules["integration"].dernier_latent
+        if latent_int is not None:
+            cible = torch.tensor([float(commande_choisie[0]), float(commande_choisie[1])])
+            decision = logique_acceptation(m, latent_int, cible, voie="gen")
+            log_verbeux("boucle", "entrainement_action", decision=decision)
+
+
+# -------------------------------------------------------------- pas de temps réel
+
+def boucle_temps_reel(etat, t=0):
+    """Pas de temps réel complet (§4.5, §10, §15) : perception, garde-fou
+    câblé (évalué en premier), composition (attention), sélection et
+    exécution de l'action, apprentissage local, vérification structurelle
+    périodique."""
+    g, monde = etat.graphe, etat.monde
+    contexte_t = monde.percevoir()
+    inputs = inputs_bruts(contexte_t)
+    vitesse_norme = float(torch.as_tensor(contexte_t["proprio"][:2], dtype=torch.float32).norm())
+
+    # perception : peuple dernier_latent des modules d'entrée (sans grad, ce
+    # n'est pas ici qu'on apprend — l'entraînement a ses propres forwards)
+    with torch.no_grad():
+        if "vision" in g.modules:
+            g.modules["vision"].forward_reconnaissance(inputs["vision"])
+        if "proprio" in g.modules:
+            g.modules["proprio"].forward_reconnaissance(inputs["proprio"])
+        if "integration" in g.modules and "vision" in g.modules and "proprio" in g.modules:
+            entree_int = g.entree_detachee([g.modules["vision"].dernier_latent,
+                                            g.modules["proprio"].dernier_latent])
+            g.modules["integration"].forward_reconnaissance(entree_int)
+
+    erreur_globale = g.erreur_globale()
+    ctx_vec = construire_contexte_enrichi(contexte_t, etat.table_besoins, erreur_globale)
+
+    # composition (attention) — exercée et entraînée à chaque pas, même si
+    # elle ne détermine pas encore directement la commande motrice de ce POC
+    # (§10.2 : l'orchestrateur compose, il ne calcule jamais lui-même)
+    T_t = construire_T_t(g, ctx_vec, trace_precedente=etat.trace_precedente)
+    trajectoire = macro_pas(g, T_t, etat.encodeur, etat.decodeur,
+                            allocation=min(CONFIG["W"], len(T_t["ptr"])))
+    etat.trace_precedente = trajectoire
+
+    # 1. réflexe câblé — TOUJOURS évalué en premier, prioritaire (§15.3)
+    commande_reflexe = reflexe_frein(contexte_t["proprio"][:2], etat.table_contexte.douleur)
+
+    # 2. sélection d'action par besoin dominant (jamais un mélange, §0/§15.3)
+    scores = _scores_actions(monde, etat.table_besoins)
+    commande = priorisation_besoin_dominant(etat.table_besoins, scores, reflexe=commande_reflexe)
+    if commande is None:
+        commande = (0, 0)
+
+    evenements = monde.appliquer_action(commande)
+    etat.table_besoins.mettre_a_jour(evenements, vitesse_norme=vitesse_norme)
+    etat.table_contexte.mettre_a_jour(evenements)
+
+    _entrainer_localement(etat, contexte_t, inputs, ctx_vec, commande, t)
+
+    # 3. vérification structurelle périodique (§4.5 : localisation → création)
+    if t % CONFIG["periode_verification_structurelle"] == 0 and etat.table_contexte.etat == "normal":
+        point = g.localiser_point_branchement(ctx_vec)
+        if point is not None:
+            point_reel = point.split("capteur:", 1)[-1] if point.startswith("capteur:") else point
+            if point_reel in g.modules:
+                m_defaillant = g.modules[point_reel]
+                resultat = g.creer_module_candidat(
+                    point_reel, n_inputs=m_defaillant.n_inputs_reco,
+                    n_latent=m_defaillant.n_latent, contexte_echec=ctx_vec,
+                    registre_rupture=etat.registre_rupture, t=t)
+                if resultat is not None:
+                    nouveau_module, simulateur = resultat
+                    etat.registre_cablage.append(
+                        module_id=nouveau_module.id, point_injection=point_reel,
+                        contexte=ctx_vec, signature_anomalie="rupture", t=t, type_="rupture")
+                    amorcage_creation(nouveau_module, ctx_vec, etat.jeu_apprentissage_gating)
+
+    log_verbeux("boucle", "pas_temps_reel", t=t, commande=commande,
+               besoin_dominant=etat.table_besoins.besoin_dominant())
+    return commande
+
+
+# ------------------------------------------------------------------ cycle nocturne
+
+def reve_coordonne(etat):
+    """Entraînement contrastif nocturne de D_φ à partir du câblage de la
+    journée (§8.3, esprit) : contexte réel (positif) contre une variante
+    perturbée (négatif) — garde le discriminateur calibré sur ce qui a
+    réellement structuré le graphe."""
+    entrees = etat.registre_cablage.entrees[-CONFIG["n_reve_coordonne"]:]
+    n = 0
+    for entree in entrees:
+        contexte = entree.get("contexte")
+        if contexte is None:
+            continue
+        positif = ajuster_dim(contexte, etat.discriminateur.dimension)
+        negatifs = [positif + torch.randn_like(positif) * 2.0
+                   for _ in range(CONFIG["n_contrefactuels"])]
+        etat.discriminateur.entrainer_contrastif(positif, negatifs, phase="nuit")
+        n += 1
+    log("boucle", "reve_coordonne", n_entrees=n)
+
+
+def cycle_nocturne(etat, t=0):
+    """Pipeline nocturne complet (§4.5, §7.2, §8, §9, M1, M6, M10) : rejeu
+    contrefactuel → REINFORCE des pointeurs, recalage sous drift, atrophie
+    (purge de provenance), rêve coordonné, purge du tampon jour."""
+    g = etat.graphe
+
+    # 1. rejeu contrefactuel -> regret -> REINFORCE des pointeurs
+    candidats = {mid: m for mid, m in g.modules.items() if not m.innate}
+    echantillon = etat.memoire_tampon.tentatives_reco[-50:]
+    if candidats and echantillon:
+        residus = rejeu_contrefactuel_nocturne(candidats, echantillon)
+        if etat.trace_precedente:
+            trajectoire_regret = []
+            for pas in etat.trace_precedente:
+                src = pas["triplet"]["src"]
+                if src in residus:
+                    regret = regret_composition(residus[src], list(residus.values()))
+                    trajectoire_regret.append({"log_prob": pas["log_prob"], "regret": regret})
+                    etat.accumulateur_orchestrateur.mettre_a_jour(regret, phase="nuit")
+            if trajectoire_regret:
+                entrainer_pointeurs(etat.encodeur, etat.decodeur, trajectoire_regret, phase="nuit")
+
+    # 2. recalage du plancher sous drift, pour les modules verrouillés
+    fen = CONFIG["taille_fenetre_drift"]
+    for m in g.modules.values():
+        if m.locked_reco and not m.innate:
+            recents = [e for _, e, _ in m.error_history[-fen:]]
+            anciens = [e for _, e, _ in m.error_history[-2 * fen:-fen]]
+            if recents and anciens:
+                resultat = sprt_drift(anciens, recents)
+                g.recalage_plancher_drift(m, resultat)
+
+    # 3. atrophie (purge de provenance en cascade pour les modules provisoires)
+    for m in list(g.modules.values()):
+        g.atrophier(m, registre_provenance=etat.registre_provenance)
+
+    # 4. rêve coordonné (discriminateur)
+    reve_coordonne(etat)
+
+    # 5. purge du tampon jour
+    etat.memoire_tampon.clear()
+    log("boucle", "cycle_nocturne_termine", n_modules=len(g.modules))
+
+
+# --------------------------------------------------------------------- boucle globale
+
+def main_loop(n_jours=3, steps_par_jour=500, graine=None, verbose=False, checkpoint=None):
+    """Boucle jour/nuit complète, persistance (§25, assemblage final)."""
+    if checkpoint and checkpoint_mod.existe(checkpoint):
+        etat = charger_etat(checkpoint)
+    else:
+        graphe, discriminateur = construire_graphe_inne()
+        monde = Monde(graine=graine)
+        table_besoins = TableBesoins()
+        etat = EtatSCL(graphe, discriminateur, monde, table_besoins)
+
+    for jour in range(n_jours):
+        set_temps(jour=jour)
+        for step in range(steps_par_jour):
+            set_temps(step=step)
+            boucle_temps_reel(etat, t=step)
+            if CONFIG["delai_step"] > 0:
+                time.sleep(CONFIG["delai_step"])
+        cycle_nocturne(etat, t=steps_par_jour)
+        if checkpoint:
+            sauvegarder_etat(checkpoint, etat)
+        if verbose:
+            log("boucle", "resume_journee", jour=jour,
+                sucres=etat.monde.compteurs["sucre"], batons=etat.monde.compteurs["baton"],
+                erreur_globale=etat.graphe.erreur_globale(), n_modules=len(etat.graphe.modules))
+
+    return etat.graphe, etat.monde, etat.table_besoins

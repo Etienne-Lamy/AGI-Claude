@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>SCL — Dashboard temps réel</title>
+<style>
+  :root {
+    --fond: #12141a; --panneau: #1b1e27; --bord: #2b2f3d;
+    --texte: #d6d9e0; --sourd: #8a90a0; --accent: #6fb3ff;
+    --ok: #5fd08a; --alerte: #ffb454; --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fond); color: var(--texte);
+         font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 18px;
+           padding: 10px 16px; border-bottom: 1px solid var(--bord); }
+  header h1 { font-size: 16px; margin: 0; color: var(--accent); }
+  header .stat b { color: var(--texte); }
+  header .stat { color: var(--sourd); }
+  #nuit { display: none; color: var(--alerte); font-weight: 600; }
+  main { display: grid; grid-template-columns: 340px 1fr 360px;
+         gap: 12px; padding: 12px; height: calc(100vh - 46px); }
+  .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .carte { background: var(--panneau); border: 1px solid var(--bord);
+           border-radius: 8px; padding: 10px 12px; }
+  .carte h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase;
+              letter-spacing: .08em; color: var(--sourd); }
+  canvas { display: block; background: #0d0f14; border-radius: 6px; }
+  #modules { overflow-y: auto; flex: 1; min-height: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 4px 6px; font-size: 12px;
+           border-bottom: 1px solid var(--bord); white-space: nowrap; }
+  th { color: var(--sourd); font-weight: 500; position: sticky; top: 0;
+       background: var(--panneau); }
+  .barre { display: inline-block; width: 54px; height: 7px; background: #2a2e3a;
+           border-radius: 4px; overflow: hidden; vertical-align: middle; }
+  .barre i { display: block; height: 100%; background: var(--ok); }
+  .badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; }
+  .b-actif { background: #234; color: var(--accent); }
+  .b-verrou { background: #253d2c; color: var(--ok); }
+  .b-test { background: #3d3325; color: var(--alerte); }
+  .pastille { display: inline-block; width: 9px; height: 9px;
+              border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  #evenements { overflow-y: auto; flex: 1; min-height: 0; font-size: 12px; }
+  #evenements div { padding: 3px 0; border-bottom: 1px solid var(--bord); }
+  #evenements .t { color: var(--sourd); margin-right: 6px; }
+  #evenements .structurel { color: var(--alerte); }
+  #evenements .verrou { color: var(--ok); }
+  #evenements .rupture { color: var(--danger); }
+  .legende { color: var(--sourd); font-size: 11px; margin-top: 6px; }
+  .legende span { margin-right: 12px; }
+  .puce { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+          margin-right: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SCL — expérience en cours</h1>
+  <span class="stat">jour <b id="h-jour">–</b> · step <b id="h-step">–</b></span>
+  <span class="stat">mode <b id="h-mode">–</b></span>
+  <span class="stat">sucres <b id="h-sucres" style="color:var(--ok)">0</b></span>
+  <span class="stat">bâtons <b id="h-batons" style="color:var(--danger)">0</b></span>
+  <span class="stat">faim <b id="h-faim">–</b> · énergie <b id="h-energie">–</b> · douleur <b id="h-douleur">–</b></span>
+  <span class="stat">barreaux <b id="h-barreaux" style="color:var(--accent)">0/4</b></span>
+  <span id="nuit">☾ cycle nocturne…</span>
+  <span class="stat" style="margin-left:auto" id="h-conn">connexion…</span>
+</header>
+<main>
+  <div class="col">
+    <div class="carte">
+      <h2>Champ visuel (10×10)</h2>
+      <canvas id="champ" width="310" height="310"></canvas>
+      <div class="legende">
+        <span><span class="puce" style="background:#5fd08a"></span>sucre</span>
+        <span><span class="puce" style="background:#ff6b6b"></span>bâton</span>
+        <span><span class="puce" style="background:#e8ecf4"></span>animal</span>
+        <span>vitesse : flèche</span>
+      </div>
+    </div>
+    <div class="carte">
+      <h2>Ce qu'il prévoit (champ t+1) — à quoi il pense</h2>
+      <canvas id="champPrevu" width="310" height="310"></canvas>
+      <div id="pensee" class="legende"></div>
+    </div>
+    <div class="carte">
+      <h2>Trajectoire (monde)</h2>
+      <canvas id="traj" width="310" height="230"></canvas>
+    </div>
+    <div class="carte">
+      <h2>Prévision — erreur relative (&lt;1 = mieux que persistance)</h2>
+      <div id="previsions" style="font-size:12px"></div>
+    </div>
+    <div class="carte">
+      <h2>Clusters (espace latent, nuit)</h2>
+      <div id="clusters" style="font-size:12px; color:var(--sourd)">pas encore de nuit…</div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="carte">
+      <h2>Erreur d'entraînement par module (lissée)</h2>
+      <canvas id="courbes" width="820" height="330"></canvas>
+      <div class="legende" id="legende-courbes"></div>
+    </div>
+    <div class="carte" style="flex:1; display:flex; flex-direction:column; min-height:0">
+      <h2>Modules</h2>
+      <div id="modules">
+        <table>
+          <thead><tr><th></th><th>module</th><th>statut</th><th>erreur</th>
+            <th>cond. reco</th><th>cond. gen</th><th>verrous</th><th>entraîné</th></tr></thead>
+          <tbody id="tbody-modules"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="carte" style="flex:1; display:flex; flex-direction:column; min-height:0">
+      <h2>Événements structurels &amp; nocturnes</h2>
+      <div id="evenements"></div>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+// ---------------------------------------------------------------- état
+const etat = {
+  offset: 0, jour: 0, step: 0, mode: "–",
+  monde: null, traj: [], nuit: false,
+  modules: new Map(),   // id -> {statut, ema, serie:[{t,e}], condR, condG, lockR, lockG, n, innate}
+  previsions: new Map(), // "module|h" -> ema erreur relative
+  evenements: [],
+  tGlobal: 0,
+};
+const couleur = id => {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `hsl(${h % 360} 65% 62%)`;
+};
+const module_ = id => {
+  if (!etat.modules.has(id))
+    etat.modules.set(id, {statut: "actif", ema: null, serie: [], condR: 0,
+                          condG: 0, lockR: false, lockG: false, n: 0, innate: false});
+  return etat.modules.get(id);
+};
+function evenement(rec, texte, classe) {
+  etat.evenements.unshift({j: rec.jour, s: rec.step, texte, classe});
+  if (etat.evenements.length > 300) etat.evenements.pop();
+}
+// ------------------------------------------------------- traitement du log
+function traiter(rec) {
+  etat.jour = rec.jour; etat.step = rec.step;
+  const a = rec.action, m = rec.acteur;
+  switch (a) {
+    case "etat_monde":
+      etat.monde = rec; etat.tGlobal++;
+      etat.traj.push(rec.position);
+      if (etat.traj.length > 4000) etat.traj.splice(0, 2000);
+      break;
+    case "choix_mode": etat.mode = rec.mode; break;
+    case "creation_module": {
+      const md = module_(m);
+      md.statut = rec.status || "actif"; md.innate = !!rec.innate;
+      evenement(rec, `création de ${m}` + (rec.innate ? " (inné)" : ""),
+                rec.innate ? "" : "structurel");
+      break; }
+    case "entrainement_reco": case "entrainement_gen": case "surveillance": {
+      const md = module_(m);
+      if (a !== "surveillance") md.n++;
+      md.ema = md.ema === null ? rec.erreur : md.ema * 0.95 + rec.erreur * 0.05;
+      md.serie.push({t: etat.tGlobal, e: md.ema});
+      if (md.serie.length > 1200)
+        md.serie = md.serie.filter((_, i) => i % 2 === 0);
+      break; }
+    case "condensateurs": {
+      const md = module_(m);
+      md.condR = rec.reco; md.condG = rec.gen;
+      md.lockR = rec.locked_reco; md.lockG = rec.locked_gen;
+      break; }
+    case "verrouillage":
+      evenement(rec, `🔒 ${m} verrouillé (${rec.voie}) — compétence confirmée`, "verrou");
+      break;
+    case "watchdog_deverrouillage":
+      module_(m).statut = "actif";
+      evenement(rec, `⚠ watchdog : ${m} déverrouillé (${rec.voie})`, "rupture");
+      break;
+    case "detecter_rupture":
+      if (rec.resultat) evenement(rec, `rupture détectée au point ${rec.resultat}`, "rupture");
+      break;
+    case "creation_candidat":
+      module_(rec.module).statut = "en_test";
+      evenement(rec, `candidat ${rec.module} créé (point ${rec.point})`, "structurel");
+      break;
+    case "creation_refusee":
+      evenement(rec, `création refusée (${rec.raison})`, "");
+      break;
+    case "fragmentation":
+      etat.modules.delete(rec.origine);
+      evenement(rec, `fragmentation de ${rec.origine} → ${rec.regle} + ${rec.exception}`, "structurel");
+      break;
+    case "decoupe":
+      etat.modules.delete(rec.origine);
+      evenement(rec, `découpe de ${rec.origine} → noyau + amovible (dim ${rec.variable_discriminante})`, "structurel");
+      break;
+    case "valider_decoupe":
+      evenement(rec, `découpe : décision « ${rec.decision} »`, "structurel");
+      break;
+    case "integration_nocturne":
+      module_(m).statut = "actif";
+      evenement(rec, `✔ ${m} intégré la nuit (erreur ${(+rec.perf).toFixed(4)})`, "verrou");
+      break;
+    case "abandon_nocturne":
+      evenement(rec, `✘ ${m} abandonné la nuit (erreur ${(+rec.perf).toFixed(4)})`, "rupture");
+      break;
+    case "retrait_module":
+      etat.modules.delete(rec.module);
+      break;
+    case "atrophie_abandon":
+      evenement(rec, `atrophie : ${m} abandonné`, "rupture");
+      break;
+    case "atrophie_nocturne":
+      etat.modules.delete(m);
+      evenement(rec, `atrophie nocturne : ${m} retiré (${rec.tentatives} tentatives, aucune certitude acquise)`, "rupture");
+      break;
+    case "decoupe_interdite":
+      evenement(rec, `découpe interdite sur ${rec.module} (${rec.echecs} échecs) → candidat`, "structurel");
+      break;
+    case "croissance_conservee":
+      evenement(rec, `croissance de ${m} conservée (${rec.voie}, gain ${(+rec.gain).toFixed(4)})`, "verrou");
+      break;
+    case "croissance_annulee":
+      evenement(rec, `croissance de ${m} annulée (pas de gain)`, "");
+      break;
+    case "debut_cycle_nocturne": etat.nuit = true;
+      evenement(rec, "— début du cycle nocturne —", "structurel"); break;
+    case "fin_cycle_nocturne": etat.nuit = false;
+      evenement(rec, "— fin du cycle nocturne —", "structurel"); break;
+    case "reve_coordonne_entree":
+      evenement(rec, `rêve : gate ajustée pour ${rec.module}`, ""); break;
+    case "mise_a_jour_clusters":
+      etat.clusters = rec.composition || null;
+      evenement(rec, `clusters : ${rec.n_racines} racine(s), tailles ${JSON.stringify(rec.tailles)}`, ""); break;
+    case "entrainement_recherche":
+      evenement(rec, `recherche : +${rec.n_positifs} / −${rec.n_negatifs}`, ""); break;
+    case "entrainement_options":
+      evenement(rec, `intuition d'options : ${rec.n_lecons} leçons intégrées`, "verrou"); break;
+    case "chantier_ouvert":
+      module_(rec.module).statut = "chantier";
+      evenement(rec, `🏗 chantier ouvert : ${rec.source} → ${rec.cible} (${rec.type}, priorité ${(+rec.priorite).toFixed(3)})`, "structurel");
+      break;
+    case "chantier_evaluation":
+      evenement(rec, `chantier ${rec.module} : erreur ${rec.erreur_relative} (seuil ${rec.seuil}) — ${rec.nuits_ok}/${rec.nuits_total} nuit(s) ok`, "");
+      break;
+    case "chantier_demontre":
+      evenement(rec, `✅ chantier DÉMONTRÉ : ${rec.module} (erreur ${rec.erreur_finale})` + (rec.nouveau_flux ? ` — nouveau flux ${rec.nouveau_flux}` : ""), "verrou");
+      break;
+    case "chantier_abandonne":
+      etat.modules.delete(rec.module);
+      evenement(rec, `✘ chantier abandonné : ${rec.module} (${rec.raison})`, "rupture");
+      break;
+    case "attention_nocturne":
+      if ((rec.aretes || []).length)
+        evenement(rec, `attention : ` + rec.aretes.map(a => `${a.de}→${a.vers}:${a.poids}`).join(" · "), "");
+      break;
+    case "barreaux": {
+      document.getElementById("h-barreaux").textContent = rec.atteints + "/4";
+      const M = rec.mesures || {};
+      evenement(rec, `échelle d'émergence : ${rec.atteints}/4 — `
+        + `É1 reco=${M.b1_reco} excès=${M.b1_exces} ${rec.b1 ? "✔" : "✘"} · `
+        + `É2 h1=${M.b2_vision_h1} ${rec.b2 ? "✔" : "✘"} · `
+        + `É3 post-action=${M.b3_apres_action} ${rec.b3 ? "✔" : "✘"} · É4 ✘`,
+        rec.atteints > 0 ? "verrou" : "structurel");
+      break; }
+    case "committer_chemin":
+      evenement(rec, `chemin exploratoire committé : ${(rec.chemin||[]).join(" → ")}`, "structurel"); break;
+    case "precision_prevision":
+      etat.previsions.set(m + "|" + rec.horizon, rec.ema);
+      break;
+    case "pensee":
+      etat.pensee = rec;
+      break;
+    case "source_projection":
+      evenement(rec, rec.source === "imagination"
+        ? "🔮 pilotage guidé par le monde PRÉDIT (vision.gen fiable)"
+        : "pilotage guidé par la perception directe", "verrou");
+      break;
+    case "exploration_motrice":
+      evenement(rec, `curiosité : exploration motrice (${JSON.stringify(rec.commande)})`, "");
+      break;
+    case "sauvegarde":
+      evenement(rec, `💾 checkpoint sauvegardé (${rec.n_modules} modules)`, "verrou"); break;
+    case "chargement":
+      evenement(rec, `💾 checkpoint chargé (${rec.n_modules} modules, ${rec.steps_monde} steps vécus)`, "verrou"); break;
+    case "resume_journee":
+      evenement(rec, `bilan jour ${rec.jour} : ${rec.n_modules} modules, err ${(+rec.erreur_globale).toFixed(4)}, ${rec.sucres} sucres, ${rec.batons} bâtons`, "verrou");
+      break;
+  }
+}
+// ---------------------------------------------------------------- rendu
+function rendre() {
+  document.getElementById("h-jour").textContent = etat.jour;
+  document.getElementById("h-step").textContent = etat.step;
+  document.getElementById("h-mode").textContent = etat.mode;
+  document.getElementById("nuit").style.display = etat.nuit ? "inline" : "none";
+  const w = etat.monde;
+  if (w) {
+    document.getElementById("h-sucres").textContent = w.compteurs.sucre;
+    document.getElementById("h-batons").textContent = w.compteurs.baton;
+    document.getElementById("h-faim").textContent = (+w.besoins.faim).toFixed(2);
+    document.getElementById("h-energie").textContent = (+w.besoins.energie).toFixed(2);
+    document.getElementById("h-douleur").textContent = (+w.besoins.douleur).toFixed(2);
+  }
+  rendreChamp(); rendreTraj(); rendreCourbes(); rendreModules();
+  rendreEvenements(); rendrePrevisions(); rendreClusters(); rendrePensee();
+}
+function rendrePensee() {
+  const cv = document.getElementById("champPrevu"), ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const n = 10, cel = cv.width / n;
+  ctx.strokeStyle = "#232734";
+  for (let i = 0; i <= n; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cel, 0); ctx.lineTo(i * cel, cv.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cel); ctx.lineTo(cv.width, i * cel); ctx.stroke();
+  }
+  const p = etat.pensee;
+  if (!p) return;
+  if (p.champ_prevu) {
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const v = p.champ_prevu[i][j];
+      let col = null;
+      if (v > 0.75) col = "rgba(95,208,138,0.95)";                    // sucre prédit
+      else if (v > 0.3 && v < 0.65) col = "rgba(255,107,107,0.9)";    // bâton prédit
+      else if (Math.abs(v) > 0.08)
+        col = `rgba(180,190,220,${Math.min(0.6, Math.abs(v))})`;      // activité floue
+      if (col) { ctx.fillStyle = col; ctx.fillRect(j * cel + 1, i * cel + 1, cel - 2, cel - 2); }
+    }
+  }
+  const seq = (p.sequence || []).map(s =>
+    `${s.module}<span style="color:var(--sourd)">(${s.activation}${s.sens === "top_down" ? "↓" : "↑"})</span>`
+  ).join(" → ");
+  document.getElementById("pensee").innerHTML =
+    `<b>mode</b> ${p.mode} · <b>commande</b> ${JSON.stringify(p.commande)} · ` +
+    `<b>projection</b> ${JSON.stringify(p.projection)}<br><b>séquence</b> ${seq || "—"}` +
+    (p.options ? `<br><b>futurs imaginés</b> ` + p.options.map(o =>
+      `<span style="white-space:nowrap">[${o.accel}]→${o.score}</span>`).join(" · ") : "") +
+    ((p.en_optimisation || []).length
+      ? `<br><b>en optimisation</b> ${p.en_optimisation.join(", ")}` : "");
+}
+function rendreClusters() {
+  if (!etat.clusters) return;
+  document.getElementById("clusters").innerHTML = etat.clusters.map((c, i) =>
+    `<div style="margin-bottom:6px"><b style="color:var(--texte)">cluster ${i + 1}</b>` +
+    ` <span style="color:var(--sourd)">(${c.n})</span><br>` +
+    c.membres.map(mo =>
+      `<span style="white-space:nowrap"><span class="pastille" style="background:${couleur(mo)}"></span>${mo}</span>`
+    ).join(" · ") + (c.n > c.membres.length ? " · …" : "") + "</div>"
+  ).join("");
+}
+function rendrePrevisions() {
+  const mods = [...new Set([...etat.previsions.keys()].map(k => k.split("|")[0]))].sort();
+  if (!mods.length) {
+    document.getElementById("previsions").innerHTML =
+      "<span style='color:var(--sourd)'>en attente de prédictions…</span>";
+    return;
+  }
+  const cell = v => {
+    if (v === undefined) return "<td>—</td>";
+    const coul = v < 0.8 ? "var(--ok)" : v < 1.2 ? "var(--alerte)" : "var(--danger)";
+    return `<td style="color:${coul}">${v.toFixed(2)}</td>`;
+  };
+  let html = "<table><thead><tr><th>module</th><th>t+1</th><th>t+2</th><th>t+3</th></tr></thead><tbody>";
+  for (const mo of mods) {
+    html += `<tr><td><span class="pastille" style="background:${couleur(mo)}"></span>${mo}</td>`
+      + cell(etat.previsions.get(mo + "|1"))
+      + cell(etat.previsions.get(mo + "|2"))
+      + cell(etat.previsions.get(mo + "|3")) + "</tr>";
+  }
+  document.getElementById("previsions").innerHTML = html + "</tbody></table>";
+}
+function rendreChamp() {
+  const cv = document.getElementById("champ"), ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const n = 10, cel = cv.width / n, w = etat.monde;
+  ctx.strokeStyle = "#232734";
+  for (let i = 0; i <= n; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cel, 0); ctx.lineTo(i * cel, cv.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cel); ctx.lineTo(cv.width, i * cel); ctx.stroke();
+  }
+  if (!w) return;
+  const centre = n / 2 | 0;
+  const dessiner = (liste, coul) => {
+    ctx.fillStyle = coul;
+    for (const [dx, dy] of liste) {
+      const cx = centre + dx, cy = centre + dy;   // dx : axe i (vertical monde)
+      if (cx < 0 || cx >= n || cy < 0 || cy >= n) continue;
+      ctx.beginPath();
+      ctx.arc((cy + 0.5) * cel, (cx + 0.5) * cel, cel * 0.3, 0, 7);
+      ctx.fill();
+    }
+  };
+  dessiner(w.sucres || [], "#5fd08a");
+  dessiner(w.batons || [], "#ff6b6b");
+  // l'animal au centre + flèche de vitesse
+  ctx.fillStyle = "#e8ecf4";
+  ctx.beginPath();
+  ctx.arc((centre + 0.5) * cel, (centre + 0.5) * cel, cel * 0.34, 0, 7);
+  ctx.fill();
+  const [vx, vy] = w.vitesse;
+  if (vx || vy) {
+    ctx.strokeStyle = "#6fb3ff"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo((centre + 0.5) * cel, (centre + 0.5) * cel);
+    ctx.lineTo((centre + 0.5 + vy * 0.9) * cel, (centre + 0.5 + vx * 0.9) * cel);
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+}
+function rendreTraj() {
+  const cv = document.getElementById("traj"), ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (etat.traj.length < 2) return;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const [x, y] of etat.traj) {
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  const marge = 12, ex = Math.max(x1 - x0, 1), ey = Math.max(y1 - y0, 1);
+  const ech = Math.min((cv.width - 2 * marge) / ey, (cv.height - 2 * marge) / ex);
+  const px = ([x, y]) => [marge + (y - y0) * ech, marge + (x - x0) * ech];
+  ctx.strokeStyle = "rgba(111,179,255,.55)";
+  ctx.beginPath();
+  etat.traj.forEach((p, i) => {
+    const [a, b] = px(p);
+    i ? ctx.lineTo(a, b) : ctx.moveTo(a, b);
+  });
+  ctx.stroke();
+  const [a, b] = px(etat.traj[etat.traj.length - 1]);
+  ctx.fillStyle = "#e8ecf4";
+  ctx.beginPath(); ctx.arc(a, b, 4, 0, 7); ctx.fill();
+}
+function rendreCourbes() {
+  const cv = document.getElementById("courbes"), ctx = cv.getContext("2d");
+  cv.width = cv.parentElement.clientWidth - 24;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  let emax = 1e-6, tmin = 1e18, tmax = -1e18;
+  for (const [, md] of etat.modules)
+    for (const p of md.serie) {
+      emax = Math.max(emax, p.e);
+      tmin = Math.min(tmin, p.t); tmax = Math.max(tmax, p.t);
+    }
+  if (tmax <= tmin) return;
+  const px = p => [(p.t - tmin) / (tmax - tmin) * (cv.width - 10) + 5,
+                   cv.height - 18 - p.e / emax * (cv.height - 30)];
+  ctx.strokeStyle = "#2b2f3d";
+  for (let g = 0; g <= 4; g++) {
+    const y = cv.height - 18 - g / 4 * (cv.height - 30);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+    ctx.fillStyle = "#8a90a0"; ctx.font = "10px sans-serif";
+    ctx.fillText((emax * g / 4).toFixed(3), 4, y - 3);
+  }
+  const legende = [];
+  for (const [id, md] of etat.modules) {
+    if (md.serie.length < 2) continue;
+    ctx.strokeStyle = couleur(id);
+    ctx.beginPath();
+    md.serie.forEach((p, i) => {
+      const [a, b] = px(p);
+      i ? ctx.lineTo(a, b) : ctx.moveTo(a, b);
+    });
+    ctx.stroke();
+    legende.push(`<span><span class="puce" style="background:${couleur(id)}"></span>${id}</span>`);
+  }
+  document.getElementById("legende-courbes").innerHTML = legende.join("");
+}
+function rendreModules() {
+  const lignes = [];
+  const tri = [...etat.modules.entries()].sort(
+    (a, b) => (b[1].innate - a[1].innate) || a[0].localeCompare(b[0]));
+  for (const [id, md] of tri) {
+    const badge = md.statut === "en_test" ? "b-test"
+                : (md.lockR || md.lockG) ? "b-verrou" : "b-actif";
+    const statut = md.statut === "en_test" ? "en test"
+                 : (md.lockR && md.lockG) ? "verrouillé" : md.statut;
+    const verrous = (md.lockR ? "🔒reco " : "") + (md.lockG ? "🔒gen" : "") || "—";
+    lignes.push(`<tr>
+      <td><span class="pastille" style="background:${couleur(id)}"></span></td>
+      <td>${id}${md.innate ? " <span style='color:var(--sourd)'>(inné)</span>" : ""}</td>
+      <td><span class="badge ${badge}">${statut}</span></td>
+      <td>${md.ema === null ? "—" : md.ema.toFixed(4)}</td>
+      <td><span class="barre"><i style="width:${md.condR * 100}%"></i></span> ${md.condR.toFixed(2)}</td>
+      <td><span class="barre"><i style="width:${md.condG * 100}%"></i></span> ${md.condG.toFixed(2)}</td>
+      <td>${verrous}</td>
+      <td>${md.n}</td></tr>`);
+  }
+  document.getElementById("tbody-modules").innerHTML = lignes.join("");
+}
+function rendreEvenements() {
+  document.getElementById("evenements").innerHTML = etat.evenements.map(e =>
+    `<div class="${e.classe}"><span class="t">j${e.j}·s${e.s}</span>${e.texte}</div>`
+  ).join("");
+}
+// ---------------------------------------------------------------- polling
+async function boucle() {
+  try {
+    const r = await fetch(`/data?offset=${etat.offset}`);
+    const d = await r.json();
+    if (d.offset < etat.offset) {   // nouveau run : reset complet
+      etat.modules.clear(); etat.traj.length = 0;
+      etat.evenements.length = 0; etat.tGlobal = 0;
+    }
+    etat.offset = d.offset;
+    for (const rec of d.lines) traiter(rec);
+    document.getElementById("h-conn").textContent =
+      d.lines.length ? `+${d.lines.length} actions` : "à jour";
+    if (d.lines.length) rendre();
+    setTimeout(boucle, d.eof ? 500 : 30);
+  } catch (err) {
+    document.getElementById("h-conn").textContent = "serveur injoignable…";
+    setTimeout(boucle, 1500);
+  }
+}
+rendre();
+boucle();
+</script>
+</body>
+</html>
