@@ -17,7 +17,10 @@ Session autonome. **Jalon atteint : l'agent mange, gère sa vitesse, évite les 
 
 **Validation longue durée** (diagnostic 20 jours × 300 pas, graine 1) : alimentation soutenue ~18 sucres/jour (361 au total), **modules stables à 6 — aucune prolifération** (le SPRT de création fait son travail : un seul module créé puis plus rien), **aucun NaN** sur 6000 pas (le correctif orchestrateur tient), temps stable ~9 s/jour (pas de ralentissement superlinéaire). La fiabilité du modèle du corps oscille (0.6–1.0) avec repli gracieux sur l'instinct lors des creux — comportement voulu (§15.1), non bloquant.
 
-**Reste** : divergence #4 (allocation WFQ), `consolidation_n_vers_un` (§9), et le rêve/jeu pendant l'ennui (stretch). Le module visuel CNN tourne mais son rôle dans la navigation reste indirect (la navigation s'appuie sur les positions relatives + modèle du corps, pas encore sur une prévision du champ visuel appris — piste : forward model visuel §1.3 "vitesse→image").
+**Reste / prochaines frontières** :
+- **Jeu pendant l'ennui (le "rêve")** : bloqué en amont, découverte de cette session — `faim` sature à 1.0 (l'agent n'arrive pas à se rassasier au rythme actuel), donc `ennui` (plafonné à 0.5) ne devient JAMAIS le besoin dominant. Le jeu est un phénomène post-satiété : il faut d'abord équilibrer densité de sucre / vitesse de faim pour que l'agent puisse s'ennuyer. **Décision de game-design à trancher par toi** (`densite_sucre`, dynamique de `faim`) avant que le mécanisme de jeu ait un sens. L'infrastructure (besoin ennui, hystérésis, scores d'action ennui) est déjà en place et n'attend que ça.
+- Divergence #4 (allocation WFQ `allocation_attention.allouer_capacite`) et `consolidation_n_vers_un` (§9, seule fonction réellement manquante) — ne se déclencheraient pas sur ce POC à 1 module créé ; complétude théorique, faible priorité.
+- **Environnement appris** : le module visuel CNN tourne mais son rôle dans la navigation reste indirect (la navigation s'appuie sur les positions relatives perçues + le modèle du corps appris, pas encore sur une prévision APPRISE du champ visuel — piste : forward model visuel §1.3 "vitesse→image", qui adresserait aussi l'échec historique du module vision décrit dans README v2).
 
 ## Mise à jour 2026-07-17 — reprise sous Claude Code
 
