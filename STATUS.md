@@ -1,5 +1,12 @@
 # État des lieux — POC SCL (2026-07-03)
 
+## Mise à jour 2026-07-17 — reprise sous Claude Code
+
+- Bascule de Claude Cowork (Windows, non exécutant) vers Claude Code sous WSL Ubuntu, répertoire de travail = ce dossier. Dépôt git connecté à `github.com:Etienne-Lamy/AGI-Claude` (SSH), poussé.
+- **CUDA GPU fonctionnel** sur torch (build maison, 5 jours de mise au point) : voir section « Environnement GPU / CUDA » dans `CLAUDE.md` pour la séquence d'activation. Validé : `torch.cuda.is_available()` OK, matmul 2048×2048 4.3 ms GPU vs 10.5 s CPU.
+- Conséquence pour les points 1-4 ci-dessous (« reste à faire ») : torch GPU est maintenant disponible, donc les tests/POC pourront tourner accélérés — plus seulement en CPU-only comme prévu au 2026-07-03.
+- Reprise du fond du projet en cours (prochaine étape à détailler ici après la session).
+
 ## Fait
 
 - **25 fonctions de la spec implémentées** (voir table de correspondance dans README.md) :
