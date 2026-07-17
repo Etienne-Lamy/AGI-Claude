@@ -68,6 +68,16 @@ def charger_etat(chemin):
     composants = checkpoint_mod.charger(chemin)
     etat = EtatSCL.__new__(EtatSCL)
     etat.__dict__.update(composants)
+    # compatibilité ascendante : un checkpoint sauvegardé avant l'ajout d'un
+    # composant (ex. le modèle du corps) ne le contient pas — on le recrée pour
+    # que la reprise multi-rounds d'un ancien cerveau.pkl ne casse jamais.
+    defauts = {
+        "modele_prevision": lambda: ModelePrevisionCorps(v_max=etat.monde.v_max),
+        "compteur_mode": lambda: {"instinct": 0, "appris": 0},
+    }
+    for nom, fabrique in defauts.items():
+        if getattr(etat, nom, None) is None:
+            setattr(etat, nom, fabrique())
     return etat
 
 
@@ -153,7 +163,11 @@ def _scores_actions(monde, besoins, predire_vprime=None):
             # aucun sucre en vue : explorer en gardant de l'élan (évite de se figer)
             scores_faim[accel] = 0.3 * (abs(v_prime[0]) + abs(v_prime[1])) - penalite
 
-        # ennui : exploration — récompense le déplacement, évite les bâtons
+        # ennui : exploration — récompense le déplacement (roaming), évite les
+        # bâtons. [Placeholder assumé — voir STATUS 2026-07-18 : une curiosité
+        # naïve par nouveauté-de-cellule à 1 pas fait MOINS bien que ce roaming
+        # balistique pour la couverture ; le vrai "jeu" demande une exploration
+        # dirigée multi-pas, piste future.]
         scores_ennui[accel] = (abs(v_prime[0]) + abs(v_prime[1])) - penalite
 
     return {"faim": scores_faim, "ennui": scores_ennui}
