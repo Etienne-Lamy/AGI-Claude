@@ -47,6 +47,9 @@ def evaluer(graine, n_jours, steps_par_jour, silencieux=True):
     total_sucre = monde.compteurs["sucre"]
     total_baton = monde.compteurs["baton"]
     steps_par_sucre = (total_steps / total_sucre) if total_sucre else float("inf")
+    mp = etat.modele_prevision
+    err_prev = (sum(mp.erreur_recente) / len(mp.erreur_recente)) if mp.erreur_recente else None
+    n_appris = etat.compteur_mode["appris"]
     return {
         "graine": graine,
         "sucres": total_sucre,
@@ -57,6 +60,9 @@ def evaluer(graine, n_jours, steps_par_jour, silencieux=True):
         "erreur_debut": erreurs_par_jour[0] if erreurs_par_jour else None,
         "erreur_fin": erreurs_par_jour[-1] if erreurs_par_jour else None,
         "n_modules": len(graphe.modules),
+        "prevision_err": round(err_prev, 5) if err_prev is not None else None,
+        "prevision_fiab": round(mp.fiabilite(), 3),
+        "frac_appris": round(n_appris / total_steps, 3),
     }
 
 
@@ -77,6 +83,8 @@ def main():
               f"err {r['erreur_debut']}→{r['erreur_fin']} "
               f"modules={r['n_modules']}")
         print(f"           sucres/jour={r['sucres_par_jour']}")
+        print(f"           modèle corps: err={r['prevision_err']} "
+              f"fiab={r['prevision_fiab']} frac_navig_appris={r['frac_appris']}")
 
     n = len(resultats)
     moy_sucre = sum(r["sucres"] for r in resultats) / n

@@ -101,6 +101,7 @@ CONFIG = dict(
     echelle_bruit_contrefactuel=0.3,
     seuil_hors_distribution=0.3,    # D_φ en dessous : verdict étiqueté hypothèse, pas pilier
     clip_grad_simulateur=2.0,       # norme max du gradient brut avant incorporation à ḡ
+    clip_grad_pointeurs=2.0,        # idem pour l'orchestrateur (REINFORCE), évite la divergence de u
                                      # (la perte NLL hétéroscédastique peut exploser
                                      # localement quand σ devient petit — 1/σ² amplifie
                                      # le gradient ; sans ce clip, un seul pas peut
@@ -162,6 +163,14 @@ CONFIG = dict(
     decroissance_douleur=0.01,     # la douleur persiste (signal d'évitement)
     seuil_reflexe_douleur=0.4,     # un seul choc déclenche le réflexe câblé
     penalite_baton_navigation=5.0, # pénalité d'un pas prédit franchissant un bâton (évitement, §15.3)
+
+    # --- modèle de prévision du corps (prevision.py, §1.3, §12) ---
+    n_hidden_prevision=16,
+    lr_prevision=5e-3,
+    fenetre_fiabilite_prevision=50,   # fenêtre d'erreur récente pour π
+    n_maj_min_prevision=100,          # apprentissages min avant de faire confiance au modèle
+    echelle_fiabilite_prevision=0.1,  # échelle de conversion erreur→π (fiabilite())
+    seuil_fiabilite_appris=0.8,       # π au-delà : le modèle appris pilote la navigation (sinon instinct)
 
     # --- disponibilité anticipée : échantillon varié 𝒲_i(t), §1.4, Phase 1 ---
     taille_echantillon_disponibilite=20,

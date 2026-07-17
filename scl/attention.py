@@ -176,24 +176,39 @@ class PointerNetwork:
     def _scores(W, u, keys):
         return torch.tanh(keys @ W.T) @ u
 
+    @staticmethod
+    def _echantillonner(scores):
+        """Softmax + tirage robustes numériquement : NaN→0, logits plafonnés
+        (évite l'overflow exp → inf/nan quand les pointeurs divergent sur de
+        longues séries de nuits), et repli uniforme si la distribution reste
+        dégénérée. Le masquage de type (-inf) est préservé (le plafond ne
+        touche que le côté haut). Retourne (idx, probs)."""
+        scores = torch.nan_to_num(scores, nan=0.0)
+        scores = torch.clamp(scores, max=30.0)   # exp(30)≈1e13, sûr ; -inf conservé
+        probs = torch.softmax(scores, dim=0)
+        if not torch.isfinite(probs).all() or float(probs.sum()) <= 0:
+            n = probs.numel()
+            probs = torch.full((n,), 1.0 / max(1, n))
+        idx = int(torch.multinomial(probs, 1))
+        return idx, probs
+
     def decoder(self, representation, elements):
         """representation : (N, d_model), alignée avec `elements` (liste de
         dicts "id"/"type"). Émet (triplet, log_prob) — [NEW] et "id" sont
         toujours des candidats valables (présents dans leurs catalogues
         respectifs). Masquage de type appliqué à la cible selon l'opérateur
         pointé (§10.2, §10.5)."""
-        probs_src = torch.softmax(self._scores(self.W_src, self.u_src, representation), dim=0)
-        idx_src = int(torch.multinomial(probs_src, 1))
+        idx_src, probs_src = self._echantillonner(
+            self._scores(self.W_src, self.u_src, representation))
 
-        probs_op = torch.softmax(self._scores(self.W_op, self.u_op, self.embeddings_op), dim=0)
-        idx_op = int(torch.multinomial(probs_op, 1))
+        idx_op, probs_op = self._echantillonner(
+            self._scores(self.W_op, self.u_op, self.embeddings_op))
         op = self.operateurs[idx_op]
 
         types = [e["type"] for e in elements]
         scores_cib = self._scores(self.W_cib, self.u_cib, representation)
         scores_cib = masque_compatibilite_type(scores_cib, types, op)
-        probs_cib = torch.softmax(scores_cib, dim=0)
-        idx_cib = int(torch.multinomial(probs_cib, 1))
+        idx_cib, probs_cib = self._echantillonner(scores_cib)
 
         triplet = {"src": elements[idx_src]["id"], "op": op, "cib": elements[idx_cib]["id"]}
         log_prob = (torch.log(probs_src[idx_src] + 1e-12)
@@ -287,6 +302,9 @@ def entrainer_pointeurs(encodeur, decodeur, trajectoire, phase="jour"):
 
     beta = CONFIG["beta_jour"] if phase == "jour" else CONFIG["beta_nuit"]
     for obj in objets:
+        # borne la norme du gradient : sans quoi les pointeurs (u) divergent
+        # sur de longues séries REINFORCE → logits inf/nan (crash multinomial)
+        torch.nn.utils.clip_grad_norm_(obj.parametres(), CONFIG["clip_grad_pointeurs"])
         grads = [p.grad for p in obj.parametres()]
         for i, g in enumerate(grads):
             if g is not None:

@@ -30,9 +30,10 @@ def main():
     p.add_argument("--delai", type=float, default=0.0,
                    help="secondes de pause par step (ex: 0.3 pour observer "
                         "chaque mouvement dans le dashboard)")
-    p.add_argument("--checkpoint", type=str, default="",
-                   help="fichier d'état persistant (ex: cerveau.pkl) — "
-                        "repris s'il existe, sauvegardé chaque nuit")
+    p.add_argument("--checkpoint", type=str, default="cerveau.pkl",
+                   help="fichier d'état persistant (défaut: cerveau.pkl) — "
+                        "repris s'il existe, sauvegardé chaque nuit. "
+                        "Passer --checkpoint '' pour repartir de zéro.")
     args = p.parse_args()
 
     logger = configurer(chemin=args.log or None, console=args.console,
@@ -40,16 +41,24 @@ def main():
     if args.delai > 0:
         from scl.config import CONFIG
         CONFIG["delai_step"] = args.delai
-    graphe, monde, besoins = main_loop(n_jours=args.jours,
-                                       steps_par_jour=args.steps,
-                                       graine=args.graine, verbose=True,
-                                       checkpoint=args.checkpoint or None)
+    etat = main_loop(n_jours=args.jours, steps_par_jour=args.steps,
+                     graine=args.graine, verbose=True,
+                     checkpoint=args.checkpoint or None)
+    monde = etat.monde
+    total_steps = monde.compteurs["steps"] or 1
+    sucres = monde.compteurs["sucre"]
+    n_appris = etat.compteur_mode.get("appris", 0)
     print("\n=== Bilan final ===")
-    print(f"Modules : {sorted(graphe.modules)}")
-    print(f"Sucres mangés : {monde.compteurs['sucre']}, "
-          f"bâtons touchés : {monde.compteurs['baton']}")
-    print(f"Besoins : {besoins.etats}")
-    print(f"Erreur globale : {graphe.erreur_globale():.4f}")
+    print(f"Modules : {sorted(etat.graphe.modules)}")
+    print(f"Sucres mangés : {sucres}, bâtons touchés : {monde.compteurs['baton']}")
+    if sucres:
+        print(f"Efficacité : {total_steps / sucres:.1f} steps/sucre (détours)")
+    print(f"Besoins : {etat.table_besoins.etats}")
+    print(f"Erreur globale : {etat.graphe.erreur_globale():.4f}")
+    print(f"Modèle du corps : fiabilité={etat.modele_prevision.fiabilite():.3f}, "
+          f"navigation apprise sur {100 * n_appris / total_steps:.0f}% des pas")
+    if args.checkpoint:
+        print(f"Cerveau sauvegardé : {args.checkpoint} (relancer pour continuer)")
     if args.log:
         print(f"Audit : {args.log} ({logger.n} actions journalisées)")
     logger.fermer()
