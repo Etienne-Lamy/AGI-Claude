@@ -9,11 +9,12 @@
 - **Baseline validée end-to-end sous CUDA** : `pytest tests/` → 181 passed. `run_poc.py` tourne, checkpoint `.pkl` reprend correctement un run interrompu (vérifié sur 2 rounds consécutifs), `viewer.py` sert le dashboard (HTTP 200). Le workflow "2 commandes" (`run_poc.py --checkpoint ... --log ...` puis `viewer.py --log ...`) existe déjà et fonctionne — pas à reconstruire, juste à documenter/stabiliser.
 - **Audit théorie↔code fait** (lecture complète de `SCL_fondements_mathematiques.md`, `SCL - Vision et Strategie.md`, `README v2.md`, tout `scl/*.py`) : socle (mémoires, module, module visuel, discriminateur, attention, création jumelée) fidèle à la théorie. Pas de résidu v1 (nettoyage déjà fait). Écart principal : couche cognitive avancée écrite/testée unitairement mais **non branchée** dans `boucle.py` (`recherche.py` A* ancrée, `allocation_attention.py` WFQ, `memoire_travail.py` multi-échelle, `disponibilite.py`, `statistiques.sprt_creation`, `simulateur.generer_contrefactuel/est_hors_distribution`), plus 4 divergences réelles (pas juste des trous) :
   1. `boucle.py` définit sa propre heuristique ad hoc de sélection d'action (`_scores_actions`) au lieu d'utiliser `decision_action.generer_actions_candidates` — contredit "l'orchestrateur compose, ne calcule jamais".
-  2. Création de module déclenchée par seuil fixe, pas par le SPRT prévu (`statistiques.sprt_creation`) — risque de prolifération que la théorie identifie explicitement (§4.5).
-  3. Composition (recherche A* + plausibilité `discriminateur`) sautée : la boucle va direct de "rupture" à "création".
-  4. Allocation d'attention fixe, pas le WFQ multi-fils prévu (`allocation_attention.allouer_capacite`).
-  5. Fonction manquante (pas juste débranchée) : `consolidation_n_vers_un` (§9).
-- **Prochaine étape** : rebrancher ces mécanismes dans `boucle.py` un par un (le code existe déjà et est testé unitairement pour la plupart), en commençant par le SPRT de création (divergence la plus risquée selon la théorie elle-même).
+  2. ~~Création de module déclenchée par seuil fixe, pas par le SPRT prévu.~~ **CORRIGÉ** (commit `829e1a5`) : `boucle_temps_reel` accumule les échecs par point (`RegistreRupture.enregistrer_echec`), les évalue via `sprt_creation` avant toute création, teste la plausibilité (`discriminateur.evaluer_plausibilite`) puis tente une composition (`recherche.a_etoile_ancree`, nouvelle fonction `_tenter_composition`) avant de créer. Vérifié : 181 tests verts + POC longue durée (aucune création sur incident isolé, création confirmée quand H1 atteint après accumulation).
+  3. Composition (recherche A* + plausibilité `discriminateur`) sautée : la boucle va direct de "rupture" à "création". — **traité par le point 2 ci-dessus** (même commit, la recherche A* ancrée est maintenant tentée avant la création quand le simulacre est plausible).
+  4. Allocation d'attention fixe, pas le WFQ multi-fils prévu (`allocation_attention.allouer_capacite`). — reste à faire.
+  1. `boucle.py` définit sa propre heuristique ad hoc de sélection d'action (`_scores_actions`) au lieu d'utiliser `decision_action.generer_actions_candidates` — contredit "l'orchestrateur compose, ne calcule jamais". — reste à faire.
+  5. Fonction manquante (pas juste débranchée) : `consolidation_n_vers_un` (§9). — reste à faire.
+- **Prochaine étape** : divergence #1 (heuristique ad hoc de sélection d'action) ou #4 (allocation d'attention WFQ).
 
 ## Fait
 
