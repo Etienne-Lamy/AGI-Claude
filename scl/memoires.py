@@ -158,10 +158,14 @@ class RegistreCablage:
 
 
 class RegistreRupture:
-    """Cooldown de création par point de rupture (§1.4, esprit)."""
+    """Cooldown de création par point de rupture (§1.4, esprit), et
+    accumulation des échecs de réparation par point pour le SPRT de création
+    (§4.5 étape 2, `statistiques.sprt_creation`) : un seul incident isolé ne
+    déclenche jamais la création, seule l'accumulation confirmée le fait."""
 
     def __init__(self):
         self.cooldown_creation = {}  # {point: t_dernier_abandon}
+        self.echecs = {}             # {point: [(contexte, residu), ...]}
 
     def peut_creer(self, point, t):
         dernier = self.cooldown_creation.get(point, -float("inf"))
@@ -174,6 +178,17 @@ class RegistreRupture:
     def marquer_abandon(self, point, t):
         self.cooldown_creation[point] = t
         log("registre_rupture", "abandon_marque", point=point, t=t)
+
+    def enregistrer_echec(self, point, contexte, residu):
+        self.echecs.setdefault(point, []).append((contexte, residu))
+        log_verbeux("registre_rupture", "echec_enregistre", point=point,
+                    n_echecs=len(self.echecs[point]))
+
+    def echecs_pour(self, point):
+        return self.echecs.get(point, [])
+
+    def purger_echecs(self, point):
+        self.echecs.pop(point, None)
 
 
 class RegistreDisponibilite:

@@ -72,6 +72,7 @@ CONFIG = dict(
     n_hidden_discriminateur=16,
     lr_discriminateur=1e-2,
     lambda_attenuation=0.5,        # atténuation douce w_j = exp(-λ r_j), jamais zéro
+    seuil_plausibilite=0.5,        # D_φ(x) au-delà : simulacre jugé plausible → composition tentée avant création (§4.5 étape 3)
 
     # --- localisation du point de branchement, non-infériorité, rejet gouverné
     # (graphe.py, §4.6, §9, §2.3, Phase 4) ---

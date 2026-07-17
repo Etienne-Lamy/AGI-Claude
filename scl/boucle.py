@@ -29,8 +29,8 @@ from .memoires import (
     RegistreProvenance, RegistreRupture, TableBesoins, TableContexte,
 )
 from .monde import ACCELERATIONS_PERMISES, Monde
-from .recherche import ValeurApprise
-from .statistiques import sprt_drift
+from .recherche import ValeurApprise, a_etoile_ancree
+from .statistiques import residu_module, sprt_creation, sprt_drift
 from .utils import ajuster_dim
 
 
@@ -155,6 +155,36 @@ def _entrainer_localement(etat, contexte_t, inputs, ctx_vec, commande_choisie, t
             log_verbeux("boucle", "entrainement_action", decision=decision)
 
 
+# --------------------------------------------- recherche de composition (§7.4-7.5)
+
+def _tenter_composition(g, point_reel, valeur_apprise):
+    """Recherche A* ancrée (§7.5) d'un module déjà certifié pouvant couvrir
+    le point de rupture, tentée avant toute création quand le simulacre est
+    jugé plausible (§4.5 étape 3). Voisinage = graphe existant (parents et
+    enfants directs) ; ancrage = tout module verrouillé rencontré en chemin
+    (§7.4, point de vérité = module certifié). Sur ce POC, le graphe est
+    quasi linéaire : l'échec de recherche est attendu la plupart du temps,
+    pas un bug (dégénérescence exhaustive documentée, `recherche.py`)."""
+
+    def voisins(mid):
+        if mid not in g.modules:
+            return []
+        return [(v, 1.0) for v in list(g.parents(mid)) + list(g.enfants(mid))
+                if v in g.modules]
+
+    def ancres(mid):
+        m = g.modules.get(mid)
+        if m is not None and m.locked_reco:
+            return "intermediaire", mid
+        return None
+
+    def objectif(mid):
+        return mid != point_reel and g.modules[mid].locked_reco
+
+    chemin = a_etoile_ancree(point_reel, objectif, voisins, valeur_apprise, ancres)
+    return chemin if chemin and len(chemin) > 1 else None
+
+
 # -------------------------------------------------------------- pas de temps réel
 
 def boucle_temps_reel(etat, t=0):
@@ -205,23 +235,50 @@ def boucle_temps_reel(etat, t=0):
 
     _entrainer_localement(etat, contexte_t, inputs, ctx_vec, commande, t)
 
-    # 3. vérification structurelle périodique (§4.5 : localisation → création)
+    # 3. vérification structurelle périodique (§4.5 : localisation → réparation
+    # accumulée → SPRT de création → plausibilité → composition ou création)
     if t % CONFIG["periode_verification_structurelle"] == 0 and etat.table_contexte.etat == "normal":
         point = g.localiser_point_branchement(ctx_vec)
         if point is not None:
             point_reel = point.split("capteur:", 1)[-1] if point.startswith("capteur:") else point
             if point_reel in g.modules:
                 m_defaillant = g.modules[point_reel]
-                resultat = g.creer_module_candidat(
-                    point_reel, n_inputs=m_defaillant.n_inputs_reco,
-                    n_latent=m_defaillant.n_latent, contexte_echec=ctx_vec,
-                    registre_rupture=etat.registre_rupture, t=t)
-                if resultat is not None:
-                    nouveau_module, simulateur = resultat
-                    etat.registre_cablage.append(
-                        module_id=nouveau_module.id, point_injection=point_reel,
-                        contexte=ctx_vec, signature_anomalie="rupture", t=t, type_="rupture")
-                    amorcage_creation(nouveau_module, ctx_vec, etat.jeu_apprentissage_gating)
+                cible = ajuster_dim(ctx_vec, m_defaillant.n_outputs_gen)
+                residu = residu_module(m_defaillant, ctx_vec, cible)
+                etat.registre_rupture.enregistrer_echec(point_reel, ctx_vec, residu)
+
+                decision, _ = sprt_creation(
+                    etat.registre_rupture.echecs_pour(point_reel),
+                    d=m_defaillant.n_outputs_gen)
+                log_verbeux("boucle", "sprt_creation_point", point=point_reel,
+                           decision=decision)
+
+                if decision in ("H0", "H1"):
+                    etat.registre_rupture.purger_echecs(point_reel)
+
+                if decision == "H1":
+                    # module manquant confirmé (échecs distincts accumulés,
+                    # pas un incident isolé) — teste la plausibilité avant
+                    # de créer : simulacre plausible → composition d'abord
+                    plausible = etat.discriminateur.evaluer_plausibilite(ctx_vec)
+                    chemin = None
+                    if plausible >= CONFIG["seuil_plausibilite"]:
+                        chemin = _tenter_composition(g, point_reel, etat.valeur_apprise)
+                    if chemin is not None:
+                        log("boucle", "composition_trouvee", point=point_reel,
+                            chemin=chemin)
+                        etat.registre_rupture.marquer_abandon(point_reel, t)
+                    else:
+                        resultat = g.creer_module_candidat(
+                            point_reel, n_inputs=m_defaillant.n_inputs_reco,
+                            n_latent=m_defaillant.n_latent, contexte_echec=ctx_vec,
+                            registre_rupture=etat.registre_rupture, t=t)
+                        if resultat is not None:
+                            nouveau_module, simulateur = resultat
+                            etat.registre_cablage.append(
+                                module_id=nouveau_module.id, point_injection=point_reel,
+                                contexte=ctx_vec, signature_anomalie="rupture", t=t, type_="rupture")
+                            amorcage_creation(nouveau_module, ctx_vec, etat.jeu_apprentissage_gating)
 
     log_verbeux("boucle", "pas_temps_reel", t=t, commande=commande,
                besoin_dominant=etat.table_besoins.besoin_dominant())
