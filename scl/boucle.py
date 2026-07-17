@@ -437,9 +437,11 @@ def main_loop(n_jours=3, steps_par_jour=500, graine=None, verbose=False, checkpo
         if checkpoint:
             sauvegarder_etat(checkpoint, etat)
         if verbose:
+            n_pas_tot = max(1, sum(etat.compteur_mode.values()))
             log("boucle", "resume_journee", jour=jour,
                 sucres=etat.monde.compteurs["sucre"], batons=etat.monde.compteurs["baton"],
                 erreur_globale=etat.graphe.erreur_globale(), n_modules=len(etat.graphe.modules),
-                fiabilite_corps=round(etat.modele_prevision.fiabilite(), 3))
+                fiabilite_corps=round(etat.modele_prevision.fiabilite(), 3),
+                frac_navig_appris=round(etat.compteur_mode.get("appris", 0) / n_pas_tot, 3))
 
     return etat
