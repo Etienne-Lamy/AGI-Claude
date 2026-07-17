@@ -12,6 +12,10 @@ Projet : SCL (Structural Continuous Learning). Docs de fond, source de vérité 
 - Après tout travail significatif, mettre à jour `STATUS.md` (fait / reste à faire / décisions / écarts). C'est le point de reprise à froid, pas l'historique du chat.
 - Ne pas répéter dans le chat ce qui est déjà dans `STATUS.md` ou les docs de fond.
 
+## Confiance
+- Quand tu dis avoir fait une action toi-même (push, install, suppression, config...), c'est pris pour vrai : pas de vérification par outil pour confirmer. On se fait confiance ; les malentendus éventuels, tu les assumes.
+- Exception : si l'étape suivante a besoin d'un état précis pour agir dessus (ex. un hash de commit exact), vérifier reste légitime — mais c'est une vérification utile à l'action, pas un contrôle de ta parole.
+
 ## Git
 - Un commit = une version fonctionnelle (tests passants, ou état explicitement documenté comme WIP dans le message de commit).
 - Aucun `push`, création/modification de remote, ou action GitHub (PR, issue...) sans confirmation explicite.
