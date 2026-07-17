@@ -1,5 +1,22 @@
 # État des lieux — POC SCL (2026-07-03)
 
+## Mise à jour 2026-07-18 — POC fonctionnel : navigation apprise
+
+Session autonome. **Jalon atteint : l'agent mange, gère sa vitesse, évite les bâtons, et APPREND son corps pour naviguer seul.**
+
+**Diagnostic initial (harnais `scl/eval_poc.py`, nouveau)** — la baseline ne mangeait presque rien (2.3 sucres / 3000 pas, `sucres==batons`, effondrement total après le jour 0). Deux pathologies :
+- *Deadlock du réflexe de douleur* : une fois v=0 le réflexe renvoyait (0,0) et re-freinait sans fin → agent paralysé ~60 pas pendant que la douleur décroît. Corrigé (`inne.reflexe_frein` rend la main à v=0).
+- *Navigation sans gestion de vitesse* : l'heuristique notait l'accélération par alignement en ignorant la vitesse → ressort non amorti qui survole le sucre sans jamais atterrir (oscillation en boucle limite). C'était exactement le cœur du problème "gérer la vitesse".
+
+**Corrections + résultats** (commits `6490481`, puis modèle appris) :
+1. **Navigation par rollout horizon-1** (`boucle._scores_actions`) : chaque accélération évaluée sur la position PRÉDITE (v'=clip(v+accel)) + pénalité de franchissement de bâton. → sucres 2.3→**192**, bâtons 2.3→**0.7**, steps/sucre 1750→**15.7**, soutenu sur 10 jours.
+2. **Modèle du corps APPRIS** (`scl/prevision.py`, divergence #1) : MLP (v,accel)→v' entraîné en ligne, auto-supervisé (cible = vitesse réellement observée). Quand sa fiabilité π dépasse le seuil, la navigation bascule de l'instinct (vérité-terrain) au modèle appris (§15.1 transfert par confiance). → le modèle atteint err≈1e-5, π≈1.0, et **pilote ~60-65% des pas** en mangeant autant (180 vs 192). L'agent a appris sa propre dynamique et navigue avec.
+3. **Crash NaN corrigé** (`attention.py`) : les pointeurs (REINFORCE) divergeaient sur longues séries → logits inf/nan → crash `multinomial`. Ajout : clip de gradient + softmax/tirage robustes (repli uniforme). Indispensable pour les runs multi-rounds.
+
+**Workflow 2 commandes** (stabilisé) : `run_poc.py` a maintenant `--checkpoint cerveau.pkl` par défaut (reprise auto multi-rounds) et un bilan enrichi (steps/sucre, fiabilité du corps, % navigation apprise). Viewer inchangé.
+
+**Reste** : divergence #4 (allocation WFQ), `consolidation_n_vers_un` (§9), et le rêve/jeu pendant l'ennui (stretch). Le module visuel CNN tourne mais son rôle dans la navigation reste indirect (la navigation s'appuie sur les positions relatives + modèle du corps, pas encore sur une prévision du champ visuel appris — piste : forward model visuel §1.3 "vitesse→image").
+
 ## Mise à jour 2026-07-17 — reprise sous Claude Code
 
 - Bascule de Claude Cowork (Windows, non exécutant) vers Claude Code sous WSL Ubuntu, répertoire de travail = ce dossier. Dépôt git connecté à `github.com:Etienne-Lamy/AGI-Claude` (SSH), poussé.
