@@ -161,6 +161,7 @@ CONFIG = dict(
     douleur_baton=0.5,
     decroissance_douleur=0.01,     # la douleur persiste (signal d'évitement)
     seuil_reflexe_douleur=0.4,     # un seul choc déclenche le réflexe câblé
+    penalite_baton_navigation=5.0, # pénalité d'un pas prédit franchissant un bâton (évitement, §15.3)
 
     # --- disponibilité anticipée : échantillon varié 𝒲_i(t), §1.4, Phase 1 ---
     taille_echantillon_disponibilite=20,

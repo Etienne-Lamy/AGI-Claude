@@ -92,29 +92,63 @@ def inputs_bruts(contexte_t):
 
 # --------------------------------------------------------- sélection d'action (§15)
 
-def _valeur_action_faim(accel, monde):
-    sucres, _ = monde.objets_visibles()
-    if not sucres:
+def _cellules_traversees(vx, vy):
+    """Cellules relatives franchies en un pas à la vitesse (vx, vy) — miroir
+    exact de la détection de collision de `monde.appliquer_action` (division
+    entière plancher), pour anticiper de la même façon un contact bâton."""
+    n_pas = int(max(abs(vx), abs(vy), 1))
+    return [((vx * i) // n_pas, (vy * i) // n_pas) for i in range(1, n_pas + 1)]
+
+
+def _predire_vitesse(v, accel, v_max):
+    return (max(-v_max, min(v_max, int(v[0]) + accel[0])),
+            max(-v_max, min(v_max, int(v[1]) + accel[1])))
+
+
+def _penalite_baton(v_prime, batons_set):
+    """Pénalité si le pas prédit franchit un bâton (évitement, pas seulement
+    freinage réflexe une fois le choc subi)."""
+    if not batons_set:
         return 0.0
-    cible = min(sucres, key=lambda d: d[0] ** 2 + d[1] ** 2)
-    norme = (cible[0] ** 2 + cible[1] ** 2) ** 0.5 or 1.0
-    return (accel[0] * cible[0] + accel[1] * cible[1]) / norme
-
-
-def _valeur_action_ennui(accel, monde):
-    return 1.0 if accel != (0, 0) else 0.0
+    for c in _cellules_traversees(v_prime[0], v_prime[1]):
+        if c in batons_set:
+            return CONFIG["penalite_baton_navigation"]
+    return 0.0
 
 
 def _scores_actions(monde, besoins):
-    """[Non résolu, marqué explicitement par la théorie elle-même, §15.3] :
-    génération d'actions candidates à horizon >1 — implémentation POC
-    minimale (rollout à horizon 0, heuristique directe), affinable sans
-    changer l'interface de `decision_action.priorisation_besoin_dominant`."""
-    candidats = list(ACCELERATIONS_PERMISES)
-    return {
-        "faim": {a: _valeur_action_faim(a, monde) for a in candidats},
-        "ennui": {a: _valeur_action_ennui(a, monde) for a in candidats},
-    }
+    """Génération d'actions candidates (§15.3) par rollout à horizon 1 avec un
+    modèle physique du corps : chaque accélération est évaluée sur la position
+    PRÉDITE au pas suivant (v' = clip(v + accel)), pas sur l'alignement de
+    l'accélération seule. Conséquence clé : la vitesse courante est prise en
+    compte — l'agent freine pour atterrir sur le sucre au lieu de le survoler
+    (gestion de la vitesse, cœur du problème). Le modèle « v' → position »
+    est ici la vérité-terrain du corps ; il constitue le point de
+    branchement où un modèle APPRIS (module de prévision) pourra le remplacer
+    sans changer l'interface (§15.3, migration vers l'apprentissage)."""
+    v = monde.vitesse
+    v_max = monde.v_max
+    sucres, batons = monde.objets_visibles()
+    batons_set = {(int(a), int(b)) for a, b in batons}
+    scores_faim, scores_ennui = {}, {}
+    for accel in ACCELERATIONS_PERMISES:
+        v_prime = _predire_vitesse(v, accel, v_max)
+        penalite = _penalite_baton(v_prime, batons_set)
+
+        # faim : minimiser la distance au sucre APRÈS déplacement (le sucre en
+        # (di,dj) devient (di-v'x, dj-v'y)) — atterrissage, pas survol.
+        if sucres:
+            dist_apres = min(((di - v_prime[0]) ** 2 + (dj - v_prime[1]) ** 2) ** 0.5
+                             for di, dj in sucres)
+            scores_faim[accel] = -dist_apres - penalite
+        else:
+            # aucun sucre en vue : explorer en gardant de l'élan (évite de se figer)
+            scores_faim[accel] = 0.3 * (abs(v_prime[0]) + abs(v_prime[1])) - penalite
+
+        # ennui : exploration — récompense le déplacement, évite les bâtons
+        scores_ennui[accel] = (abs(v_prime[0]) + abs(v_prime[1])) - penalite
+
+    return {"faim": scores_faim, "ennui": scores_ennui}
 
 
 # ------------------------------------------------------------- entraînement local

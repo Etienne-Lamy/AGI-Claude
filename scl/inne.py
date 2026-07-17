@@ -61,8 +61,11 @@ def reflexe_frein(vitesse, douleur):
         return None
     vx, vy = float(vitesse[0]), float(vitesse[1])
     if vx == 0 and vy == 0:
-        commande = (0, 0)
-    elif abs(vx) >= abs(vy):
+        # momentum déjà nul : le garde-fou n'a plus rien à freiner, il rend la
+        # main à la sélection par besoin (qui, elle, évite les bâtons) — sinon
+        # l'agent reste paralysé à v=0 tant que la douleur décroît (deadlock).
+        return None
+    if abs(vx) >= abs(vy):
         commande = (-1 if vx > 0 else 1, 0)
     else:
         commande = (0, -1 if vy > 0 else 1)
