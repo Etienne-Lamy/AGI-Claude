@@ -1,7 +1,17 @@
 # Règles de travail — AGI-Claude / SCL
 
-Projet : SCL (Structural Continuous Learning). Docs de fond, source de vérité — lues à la demande, jamais dupliquées ici :
+Projet : SCL (Structural Continuous Learning). Docs de fond, source de vérité — jamais dupliqués ici :
 `README v2.md`, `SCL - Vision et Strategie.md`, `Architecture SCL Code v2.md`, `SCL_fondements_mathematiques.md`, `STATUS.md`
+
+## Documents de fond — contexte direct, pas de délégation
+- `README v2.md`, `SCL_fondements_mathematiques.md`, `SCL - Vision et Strategie.md`, `STATUS.md` : chargés en contexte principal dès que la discussion touche le cœur de la stratégie/théorie — jamais délégués à un sous-agent (perte d'info / téléphone arabe sur ce qui compte). La délégation reste OK pour l'exploration de code périphérique (cf. Délégation).
+- Ces 4 documents ne sont modifiés que d'un commun accord, jamais unilatéralement.
+- `SCL_fondements_mathematiques.md` : versionné, maintenu en parallèle en `.tex` + `.pdf`.
+- `STATUS.md` : mis à jour en continu (à chaque changement d'état notable, pas seulement en fin de session).
+
+## Autonomie d'exécution locale
+- Édition de fichiers et exécution de tests/POC en local (`pytest`, `run_poc.py`, viewer...) : autonomie totale, aucune confirmation nécessaire. Seules les actions Git externes (push, remote, GitHub) restent soumises à confirmation (cf. Git).
+- Toute version du POC doit rester exécutable et monitorable en 2 commandes simples (lancement + viewer localhost), avec log JSONL + checkpoint `.pkl` pour reprendre un run déjà avancé.
 
 ## Style
 - Réponses courtes, denses. Pas de récap de fin sauf demande explicite. Pas de blabla de transition.
