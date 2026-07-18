@@ -13,6 +13,7 @@ dashboard : `champ_vu` = réel(t), `champ_prevu` = prédit(t) par la chaîne.
     python3 viewer.py --log etape2.jsonl --port 8400   # RÉEL vs PRÉDIT-suivant
 """
 import argparse
+import time
 
 import numpy as np
 
@@ -69,14 +70,19 @@ def main():
     p.add_argument("--vitesse", type=int, nargs=2, default=[1, 1])
     p.add_argument("--graine", type=int, default=1)
     p.add_argument("--log", type=str, default="")
-    p.add_argument("--pas_demo", type=int, default=120)
+    p.add_argument("--pas_demo", type=int, default=400)
+    p.add_argument("--delai", type=float, default=0.0,
+                   help="secondes de pause par pas de démo (ex: 0.15 pour voir "
+                        "le champ défiler en direct dans le viewer)")
     args = p.parse_args()
-    if args.log:
-        configurer(chemin=args.log)
+    logger = configurer(chemin=args.log) if args.log else None
 
     v = tuple(args.vitesse)
     print(f"Device : {DEVICE} — entraînement (vitesse {v})…")
     vision, pred, m = entrainer(vitesse=v, graine=args.graine)
+    if args.log:
+        print(f"Démo en cours (vitesse {v}) — ouvre le viewer : "
+              f"python3 viewer.py --log {args.log}")
 
     # démo : dérouler la chaîne et comparer prédit(t) vs réel(t)
     t = CONFIG["taille_perception"]
@@ -98,6 +104,9 @@ def main():
                     n_predicteurs=1, n_maitrises=0, resolution=[1, t, t],
                     champ_vu=_champ_str(champ),                 # RÉEL(t)
                     champ_prevu=_champ_str(champ_pred))         # PRÉDIT(t) via chaîne
+                if args.delai > 0 and logger is not None:
+                    logger.f.flush()                            # flux temps réel pour le viewer
+                    time.sleep(args.delai)
         champ_prec = champ
         m.appliquer_action((0, 0))
 
