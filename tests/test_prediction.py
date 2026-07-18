@@ -40,3 +40,25 @@ def test_predicteur_apprend_un_decalage_et_le_prefere():
     assert r_entraine > 0.6, f"n'a pas appris le décalage entraîné : {r_entraine}"
     assert r_entraine > r_autre + 0.2, \
         f"ne discrimine pas la vitesse : entraîné={r_entraine} autre={r_autre}"
+
+
+def test_predicteur_abstrait_apprend_un_decalage():
+    """Module 2 : dans un espace abstrait synthétique, apprend à prédire le
+    champ abstrait décalé (MSE qui descend, forme correcte)."""
+    import numpy as np
+    from scl.module_ae import PredicteurAbstrait
+    from scl.config import CONFIG
+    rng = np.random.default_rng(0)
+    k, t = CONFIG["canaux_latent_vision"], CONFIG["taille_perception"]
+    pred = PredicteurAbstrait("test_abstrait")
+    def paire():
+        z = rng.standard_normal((k, t, t)).astype("float32")
+        return z, np.roll(z, 1, axis=1)          # décalage fixe en abstrait
+    for _ in range(30):
+        a, b = paire(); pred.entrainer(a, b)
+    inc0 = pred.incertitude()
+    for _ in range(400):
+        a, b = paire(); pred.entrainer(a, b)
+    a, _ = paire()
+    assert tuple(pred.predire(a).shape) == (k, t, t)
+    assert pred.incertitude() < inc0

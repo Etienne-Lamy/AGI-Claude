@@ -204,3 +204,53 @@ class ModuleAutoencodeur:
     def charger_etat(self, etat):
         self.enc.load_state_dict({k: v.to(DEVICE) for k, v in etat["enc"].items()})
         self.dec.load_state_dict({k: v.to(DEVICE) for k, v in etat["dec"].items()})
+
+
+class PredicteurAbstrait:
+    """Module 2 — prédit le CHAMP ABSTRAIT suivant à partir du précédent, DANS
+    l'espace latent du module 1 (vision). Enchaîné au module 1 :
+        champ_{t-1} --enc(1)--> z_{t-1} --pred(2)--> ẑ_t --gen(1)--> champ_t prédit.
+    À vitesse fixe, ẑ_t est le décalé de z_{t-1} ; le module 2 apprend ce décalage
+    en abstrait. Conv (k→c→k), perte MSE sur le champ abstrait cible, GPU."""
+
+    def __init__(self, id, canaux_latent=None, canaux_cachee=None):
+        self.id = id
+        k = canaux_latent or CONFIG["canaux_latent_vision"]
+        c = canaux_cachee or CONFIG["canaux_cachee_vision"]
+        self.k = k
+        self.net = torch.nn.Sequential(
+            torch.nn.Conv2d(k, c, 3, padding=1), torch.nn.ReLU(),
+            torch.nn.Conv2d(c, c, 3, padding=1), torch.nn.ReLU(),
+            torch.nn.Conv2d(c, k, 3, padding=1)).to(DEVICE)
+        self.opt = torch.optim.Adam(self.net.parameters(), lr=CONFIG["lr_vision_ae"])
+        self.buffer = deque(maxlen=CONFIG["taille_buffer_vision"])
+        self.erreurs = []
+        log(self.id, "creation_predicteur_abstrait", canaux_latent=k, device=str(DEVICE))
+
+    def _b(self, z):
+        return torch.as_tensor(z, dtype=torch.float32, device=DEVICE).reshape(1, self.k, *z.shape[-2:])
+
+    def predire(self, z_prec):
+        with torch.no_grad():
+            return self.net(self._b(z_prec)).squeeze(0)
+
+    def entrainer(self, z_prec, z_present):
+        self.buffer.append((torch.as_tensor(z_prec, dtype=torch.float32, device=DEVICE),
+                            torch.as_tensor(z_present, dtype=torch.float32, device=DEVICE)))
+        n = min(len(self.buffer), CONFIG["taille_lot_vision"])
+        paires = random.sample(list(self.buffer), n)
+        prec = torch.stack([a for a, _ in paires])
+        pres = torch.stack([b for _, b in paires])
+        pred = self.net(prec)
+        perte = torch.mean((pred - pres) ** 2)
+        self.opt.zero_grad()
+        perte.backward()
+        self.opt.step()
+        e = float(perte.detach())
+        self.erreurs.append(e)
+        return e
+
+    def incertitude(self, fenetre=None):
+        fenetre = fenetre or CONFIG["fenetre_incertitude"]
+        h = self.erreurs[-fenetre:]
+        return sum(h) / len(h) if h else float(CONFIG["incertitude_initiale"])
