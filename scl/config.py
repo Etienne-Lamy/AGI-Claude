@@ -85,6 +85,13 @@ CONFIG = dict(
     epsilon_sigma=0.05,             # seuil de variance du bruit résiduel
     taille_minimale_disponibilite=5,
 
+    # --- curiosité / motivation intrinsèque (curiosite.py, §15.2) ---
+    fenetre_incertitude=20,         # fenêtre d'erreur récente pour incertitude/progrès
+    incertitude_initiale=1.0,       # incertitude d'un module jamais évalué (max ⇒ attractif)
+    min_vecu_maitrise=40,           # nb min d'évaluations avant de déclarer un module maîtrisé
+    seuil_incertitude_maitrise=0.02,# incertitude sous laquelle un module est "maîtrisé"
+    seuil_progres_maitrise=0.005,   # progrès sous lequel on considère le plateau atteint
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,
