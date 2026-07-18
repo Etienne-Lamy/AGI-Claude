@@ -1,5 +1,45 @@
 # État des lieux — POC SCL (2026-07-03)
 
+## Mise à jour 2026-07-18 (nuit) — REPRISE ÉTAPE PAR ÉTAPE. ÉTAPE 1 (vision) VALIDÉE
+
+L'auteur a recadré : la couche « curiosité/dynamique » précédente ne validait pas
+les briques une par une. On reprend selon le plan des fondements mathématiques,
+**une étape validée avant la suivante**. Deux objets génériques seulement : le
+module détecteur/générateur, et l'orchestrateur qui les compose.
+
+**Découverte critique** : l'ancienne vision (JEPA masqué) s'EFFONDRAIT à zéro
+(décodeur sort tout-noir → PRÉVU vide) — minimum trivial de la MSE sur un champ
+~90% vide. « incertitude vision maîtrisée » mesurait donc du vent. (Vérifié :
+0 cellule-objet reconstruite.)
+
+**ÉTAPE 1 — la vision compresse et reconstruit le champ. VALIDÉE.**
+`scl/module_ae.py` (objet générique détecteur/générateur, GPU) :
+- autoencodeur **convolutif** (un MLP plafonne à ~44% de rappel quelle que soit
+  la taille du latent — pb d'architecture, pas de capacité : un MLP ne mappe pas
+  position→position pour des objets d'1 px ; la conv, locale/équivariante, si) ;
+- reconstruction par **classification par cellule** (4 classes), entropie croisée
+  **pondérée** (objets ≫ vide) → pas d'effondrement ;
+- en ligne, GPU, mini-lot de rejeu.
+- Mesuré (`scl/etape1_vision.py`, vitesse fixe, isolé) : erreur 0.99→**0.0000**,
+  rappel/précision **100%/100%** en ~300 pas ; **VU = PRÉVU lettre pour lettre**
+  dans le viewer (rendu en lettres S/B/o/·). Commande :
+  `python3 -m scl.etape1_vision --pas 3000 --log etape1.jsonl` puis
+  `python3 viewer.py --log etape1.jsonl`.
+
+**Prochaines étapes (NON commencées, à valider une par une)** :
+- **Étape 2a** : à la main, un module prédictif « champ abstrait P-1 → champ
+  abstrait P » et un « champ visuel P-1 → champ visuel P » — leur condensateur/
+  score de fiabilité est un INDICATEUR DE VITESSE (bon score ⇔ on est à la vitesse
+  d'entraînement). D'abord branché par A*, puis par le LLM de l'orchestrateur.
+- **Étape 2b** : l'orchestrateur (Set Transformer + Pointer Network) COMPOSE ces
+  modules ; en journée prévoit un champ à la fois ; en rêve, déroule plusieurs
+  actions pour trouver celles qui rapprochent les sucres et entraîne les modules
+  d'optimisation d'action. Double objectif : qualité de prévision + confort.
+
+La couche « curiosité/dynamique » (`curiosite.py`, `dynamique.py`) et l'action par
+curiosité restent en place mais NE SONT PAS le chemin validé — à réévaluer/retirer
+une fois l'orchestrateur en place.
+
 ## Mise à jour 2026-07-18 (soir) — REFONTE : émergence par curiosité (retrait du câblage)
 
 Recadrage majeur demandé par l'auteur : le POC « navigation apprise » ci-dessous

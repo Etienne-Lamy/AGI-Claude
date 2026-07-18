@@ -10,3 +10,4 @@ __pycache__/
 # fichiers temporaires d'éditeur
 *.swp
 *~
+*.incompatible
