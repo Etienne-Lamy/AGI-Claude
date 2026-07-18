@@ -58,14 +58,14 @@
     <div class="pan">
       <h2>Champ visuel — vu vs prévu (reconstruction vision)</h2>
       <div class="champs">
-        <div class="champ"><canvas id="cv-vu" width="120" height="120"></canvas><div class="lg">VU (capteur)</div></div>
-        <div class="champ"><canvas id="cv-prevu" width="120" height="120"></canvas><div class="lg">PRÉVU (module)</div></div>
+        <div class="champ"><canvas id="cv-vu" width="170" height="170"></canvas><div class="lg">VU (capteur)</div></div>
+        <div class="champ"><canvas id="cv-prevu" width="170" height="170"></canvas><div class="lg">PRÉVU (module)</div></div>
       </div>
       <div class="legende">
-        <span><i style="background:#0c0e13"></i>vide</span>
-        <span><i style="background:#3a6ea5"></i>corps</span>
-        <span><i style="background:#e08a3c"></i>bâton</span>
-        <span><i style="background:#5fd08a"></i>sucre</span>
+        <span><b style="color:#5fd08a">S</b> sucre</span>
+        <span><b style="color:#e08a3c">B</b> bâton</span>
+        <span><b style="color:#3a6ea5">o</b> corps</span>
+        <span><b style="color:#3a3f4d">·</b> vide</span>
       </div>
       <div class="hint">Quand PRÉVU ressemble à VU, la vision a maîtrisé le champ statique
         — premier palier d'émergence, avant que l'agent ne se mette à bouger.</div>
@@ -105,20 +105,23 @@ const NOM_ACCEL = {"0,0":"immobile","1,0":"+x","-1,0":"−x","0,1":"+y","0,-1":"
 const SEUIL_MAITRISE = 0.02, RES = 10;
 let offset = 0, ivSeries = [], traj = [], dernierPouls = null;
 
-function couleurChamp(v){
-  if(v < 0.12) return "#0c0e13";
-  if(v < 0.37) return "#3a6ea5";
-  if(v < 0.75) return "#e08a3c";
-  return "#5fd08a";
+function lettreChamp(v){
+  if(v < 0.12) return ["·","#3a3f4d"];
+  if(v < 0.37) return ["o","#3a6ea5"];   // corps
+  if(v < 0.75) return ["B","#e08a3c"];   // bâton
+  return ["S","#5fd08a"];                 // sucre
 }
 function dessineChamp(id, str){
   const cv=document.getElementById(id), ctx=cv.getContext("2d"), px=cv.width/RES;
   ctx.clearRect(0,0,cv.width,cv.height);
   if(!str) return;
   const vals=str.split(",").map(parseFloat);
+  ctx.font=`${Math.floor(px*0.8)}px ui-monospace,monospace`;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
   for(let i=0;i<RES;i++) for(let j=0;j<RES;j++){
-    ctx.fillStyle=couleurChamp(vals[i*RES+j]||0);
-    ctx.fillRect(j*px,i*px,Math.ceil(px),Math.ceil(px));
+    const [ch,col]=lettreChamp(vals[i*RES+j]||0);
+    ctx.fillStyle=col;
+    ctx.fillText(ch, j*px+px/2, i*px+px/2);
   }
 }
 function dessineCourbe(id, serie, seuil){

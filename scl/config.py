@@ -98,6 +98,17 @@ CONFIG = dict(
     sigma_prior_dynamique=0.5,      # confiance du prior "rien ne change" (petit ⇒ un vrai Δv surprend)
     periode_pouls=3,                # cadence (en pas) de l'instantané "pouls" pour le dashboard
 
+    # --- ÉTAPE 1 : autoencodeur de vision (module_ae.py) — objet générique
+    #     détecteur/générateur, GPU. Perte PONDÉRÉE (objets ≫ vide) pour éviter
+    #     l'effondrement à zéro sur un champ ~90% vide (échec README v2). ---
+    canaux_latent_vision=3,         # canaux du champ abstrait (10×10×k) — encodeur CONVOLUTIF
+    canaux_cachee_vision=16,        # canaux cachés des convolutions enc/dec
+    lr_vision_ae=1.5e-3,            # pas d'apprentissage (Adam)
+    poids_objet_vision=6.0,         # poids relatif d'une cellule-objet vs le vide (équilibre rappel/précision)
+    seuil_objet_vision=0.1,         # au-dessus : cellule considérée "objet" (non vide)
+    taille_buffer_vision=512,       # mémoire de rejeu (frames récentes) pour stabiliser l'apprentissage
+    taille_lot_vision=32,           # taille du mini-lot entraîné à chaque pas (en ligne mais stable)
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,
