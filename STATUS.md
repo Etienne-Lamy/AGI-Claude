@@ -26,15 +26,22 @@ module détecteur/générateur, et l'orchestrateur qui les compose.
   `python3 -m scl.etape1_vision --pas 3000 --log etape1.jsonl` puis
   `python3 viewer.py --log etape1.jsonl`.
 
-**Prochaines étapes (NON commencées, à valider une par une)** :
-- **Étape 2a** : à la main, un module prédictif « champ abstrait P-1 → champ
-  abstrait P » et un « champ visuel P-1 → champ visuel P » — leur condensateur/
-  score de fiabilité est un INDICATEUR DE VITESSE (bon score ⇔ on est à la vitesse
-  d'entraînement). D'abord branché par A*, puis par le LLM de l'orchestrateur.
+**ÉTAPE 2a (cœur) — prédiction du champ suivant, à la main. VALIDÉE.**
+`scl/module_ae.py` : `entrainer_transition(P-1→P)`, `predire`, `fidelite_transition`.
+Un prédicteur visuel entraîné à v=(1,1) : rappel de prédiction **84% à (1,1)** vs
+**~20% aux autres vitesses**. Donc **la fiabilité EST un indicateur de vitesse**
+(fondements §12/§4). Commande : `python3 -m scl.etape2_prediction --pas 2500`.
+
+**Prochaines étapes (NON faites)** :
+- reste 2a : prédicteur du champ ABSTRAIT (P-1→P en latent, analogue), branchement A*.
 - **Étape 2b** : l'orchestrateur (Set Transformer + Pointer Network) COMPOSE ces
   modules ; en journée prévoit un champ à la fois ; en rêve, déroule plusieurs
   actions pour trouver celles qui rapprochent les sucres et entraîne les modules
   d'optimisation d'action. Double objectif : qualité de prévision + confort.
+
+Note matériel : la Titan Black (Kepler) a un watchdog qui peut tuer un kernel si
+on empile trop de modules GPU d'un coup ("launch timed out") ; le GPU récupère
+seul, entraîner les modules un par un / par lots modérés l'évite.
 
 La couche « curiosité/dynamique » (`curiosite.py`, `dynamique.py`) et l'action par
 curiosité restent en place mais NE SONT PAS le chemin validé — à réévaluer/retirer
