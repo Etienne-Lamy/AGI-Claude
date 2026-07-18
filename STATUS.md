@@ -1,6 +1,49 @@
 # État des lieux — POC SCL (2026-07-03)
 
-## Mise à jour 2026-07-18 — POC fonctionnel : navigation apprise
+## Mise à jour 2026-07-18 (soir) — REFONTE : émergence par curiosité (retrait du câblage)
+
+Recadrage majeur demandé par l'auteur : le POC « navigation apprise » ci-dessous
+(section précédente) TRAHISSAIT la thèse — la sélection d'action était câblée
+(lecture des coordonnées vérité-terrain des objets via `monde.objets_visibles()`
++ distance géométrique) ; l'orchestrateur s'entraînait mais ne pilotait pas le
+moteur. Le monde est un bac à sable de PREUVE D'ÉMERGENCE, pas un chasse-sucres.
+
+**Nouveau moteur : la curiosité (motivation intrinsèque, §4/§15.2).** L'agent
+minimise son incertitude prédictive. Chaîne d'émergence voulue par l'auteur,
+maintenant reproduite :
+1. il maîtrise sa VISION (reconstruction du champ statique) — tant qu'elle est
+   incertaine, rester immobile est ce qui réduit le plus l'incertitude → il reste ;
+2. vision maîtrisée → seule l'ACTION apporte de la nouvelle incertitude → il agit ;
+3. agir révèle l'incertitude sur la DYNAMIQUE (vitesse suivante | accélération) →
+   surprise confirmée (SPRT) → NAISSANCE d'un module prédicteur dédié ;
+4. il l'entraîne jusqu'à maîtrise, puis explore l'accélération suivante — de
+   proche en proche jusqu'à maîtriser toutes les directions × accélérations.
+
+**Mesuré (25 j, graine 1)** : ~55/300 pas immobiles au jour 0 (phase vision-first
+réelle) ; puis prédicteurs de dynamique qui ÉMERGENT (n_pred 0→1→2→3→4, un par
+accélération ±x/±y ; l'accél. nulle n'en crée jamais) ; incertitudes qui
+DESCENDENT jusqu'à maîtrise (0.0017–0.0095 à j24). Aucune coordonnée d'objet,
+aucune géométrie. La faim/les sucres ne pilotent plus rien (conséquence secondaire).
+
+**Fichiers clés** : `scl/curiosite.py` (incertitude / progrès d'apprentissage /
+maîtrise / frontière) ; `scl/dynamique.py` (prédicteurs créés à la demande,
+prior inné trivial « rien ne change », SPRT sur résidu NORMALISÉ) ;
+`boucle._action_curieuse` (choix par incertitude max) ; `module.entrainer_predictif`
+(reco+gen conjoint). Retiré : `scl/prevision.py` (modèle du corps pré-câblé),
+`_scores_actions` géométrique. **Viewer entièrement refait** (`viewer.html` v6,
+piloté par un « pouls » compact) : champ vu vs prévu, incertitude vision,
+incertitude de dynamique par accélération (barres orange→vert), trajectoire,
+événements d'émergence.
+
+**Reste / pistes** : convergence des prédicteurs vers une maîtrise STABLE (le
+binaire « maîtrisé » oscille encore un peu, un pic transitoire de ré-incertitude
+vers j15 puis re-convergence) ; brancher l'orchestrateur (Set Transformer +
+Pointer Network) pour qu'il COMPOSE réellement les prédicteurs (abstraction
+montante) ; faire ré-émerger, plus tard et de façon apprise, un comportement lié
+à la faim (prédire quelles actions la réduisent) — mais seulement une fois le
+socle prédictif solide. 197 tests verts.
+
+## Mise à jour 2026-07-18 — POC fonctionnel : navigation apprise (⚠ approche câblée, remplacée ci-dessus)
 
 Session autonome. **Jalon atteint : l'agent mange, gère sa vitesse, évite les bâtons, et APPREND son corps pour naviguer seul.**
 
