@@ -101,8 +101,8 @@ CONFIG = dict(
     # --- ÉTAPE 1 : autoencodeur de vision (module_ae.py) — objet générique
     #     détecteur/générateur, GPU. Perte PONDÉRÉE (objets ≫ vide) pour éviter
     #     l'effondrement à zéro sur un champ ~90% vide (échec README v2). ---
-    canaux_latent_vision=3,         # canaux du champ abstrait (10×10×k) — encodeur CONVOLUTIF
-    canaux_cachee_vision=16,        # canaux cachés des convolutions enc/dec
+    dim_latent_vision=64,           # taille du champ abstrait COMPRESSÉ (< 100 = parcimonie, §5)
+    canaux_cachee_vision=32,        # canaux des convolutions enc/dec
     lr_vision_ae=1.5e-3,            # pas d'apprentissage (Adam)
     poids_objet_vision=6.0,         # poids relatif d'une cellule-objet vs le vide (équilibre rappel/précision)
     seuil_objet_vision=0.1,         # au-dessus : cellule considérée "objet" (non vide)

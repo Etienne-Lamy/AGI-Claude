@@ -42,23 +42,24 @@ def test_predicteur_apprend_un_decalage_et_le_prefere():
         f"ne discrimine pas la vitesse : entraîné={r_entraine} autre={r_autre}"
 
 
-def test_predicteur_abstrait_apprend_un_decalage():
-    """Module 2 : dans un espace abstrait synthétique, apprend à prédire le
-    champ abstrait décalé (MSE qui descend, forme correcte)."""
+def test_predicteur_abstrait_apprend_une_transformation():
+    """Module 2 : dans l'espace latent COMPRESSÉ, apprend une transformation
+    fixe (ici une permutation cyclique du vecteur) — MSE qui descend, forme
+    correcte (vecteur de dim_latent)."""
     import numpy as np
     from scl.module_ae import PredicteurAbstrait
     from scl.config import CONFIG
     rng = np.random.default_rng(0)
-    k, t = CONFIG["canaux_latent_vision"], CONFIG["taille_perception"]
+    d = CONFIG["dim_latent_vision"]
     pred = PredicteurAbstrait("test_abstrait")
     def paire():
-        z = rng.standard_normal((k, t, t)).astype("float32")
-        return z, np.roll(z, 1, axis=1)          # décalage fixe en abstrait
+        z = rng.standard_normal(d).astype("float32")
+        return z, np.roll(z, 1)                  # transformation fixe en latent
     for _ in range(30):
         a, b = paire(); pred.entrainer(a, b)
     inc0 = pred.incertitude()
-    for _ in range(400):
+    for _ in range(500):
         a, b = paire(); pred.entrainer(a, b)
     a, _ = paire()
-    assert tuple(pred.predire(a).shape) == (k, t, t)
+    assert tuple(pred.predire(a).shape) == (d,)
     assert pred.incertitude() < inc0
