@@ -9,6 +9,7 @@ l'autre n'appartenait à la spécification v6 ; le chemin structurel
 `EtatSCL` rassemble tous les composants construits UNE FOIS par `main_loop`
 (discriminateur, encodeur, décodeur, V_ψ...) et transportés explicitement —
 jamais recréés en cours de route (§0)."""
+import os
 import time
 
 import torch
@@ -416,15 +417,33 @@ def cycle_nocturne(etat, t=0):
 
 # --------------------------------------------------------------------- boucle globale
 
+def _etat_neuf(graine):
+    graphe, discriminateur = construire_graphe_inne()
+    return EtatSCL(graphe, discriminateur, Monde(graine=graine), TableBesoins())
+
+
 def main_loop(n_jours=3, steps_par_jour=500, graine=None, verbose=False, checkpoint=None):
     """Boucle jour/nuit complète, persistance (§25, assemblage final)."""
+    etat = None
     if checkpoint and checkpoint_mod.existe(checkpoint):
-        etat = charger_etat(checkpoint)
-    else:
-        graphe, discriminateur = construire_graphe_inne()
-        monde = Monde(graine=graine)
-        table_besoins = TableBesoins()
-        etat = EtatSCL(graphe, discriminateur, monde, table_besoins)
+        try:
+            etat = charger_etat(checkpoint)
+        except Exception as exc:
+            # checkpoint incompatible avec le code courant (ex. classe supprimée
+            # entre deux versions) : la reprise ne doit JAMAIS casser. On archive
+            # l'ancien cerveau et on repart d'un état neuf.
+            secours = checkpoint + ".incompatible"
+            try:
+                os.replace(checkpoint, secours)
+            except OSError:
+                secours = "(non archivé)"
+            log("boucle", "checkpoint_incompatible", chemin=checkpoint,
+                erreur=str(exc), archive=secours)
+            print(f"[SCL] checkpoint '{checkpoint}' incompatible avec le code actuel "
+                  f"({type(exc).__name__}: {exc}). Ancien cerveau archivé → {secours}. "
+                  f"Redémarrage d'un cerveau neuf.")
+    if etat is None:
+        etat = _etat_neuf(graine)
 
     for jour in range(n_jours):
         set_temps(jour=jour)
