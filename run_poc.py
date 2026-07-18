@@ -13,6 +13,7 @@ import argparse
 
 from scl.logger import configurer
 from scl.boucle import main_loop
+from scl import curiosite
 
 
 def main():
@@ -45,18 +46,19 @@ def main():
                      graine=args.graine, verbose=True,
                      checkpoint=args.checkpoint or None)
     monde = etat.monde
-    total_steps = monde.compteurs["steps"] or 1
-    sucres = monde.compteurs["sucre"]
-    n_appris = etat.compteur_mode.get("appris", 0)
+    dyn = etat.dynamique
     print("\n=== Bilan final ===")
     print(f"Modules : {sorted(etat.graphe.modules)}")
-    print(f"Sucres mangés : {sucres}, bâtons touchés : {monde.compteurs['baton']}")
-    if sucres:
-        print(f"Efficacité : {total_steps / sucres:.1f} steps/sucre (détours)")
-    print(f"Besoins : {etat.table_besoins.etats}")
-    print(f"Erreur globale : {etat.graphe.erreur_globale():.4f}")
-    print(f"Modèle du corps : fiabilité={etat.modele_prevision.fiabilite():.3f}, "
-          f"navigation apprise sur {100 * n_appris / total_steps:.0f}% des pas")
+    if "vision" in etat.graphe.modules:
+        print(f"Incertitude vision (champ statique) : "
+              f"{curiosite.incertitude(etat.graphe.modules['vision']):.4f}")
+    print(f"Prédicteurs de dynamique émergés : {len(dyn.predicteurs)} "
+          f"(accélérations : {sorted(list(a) for a in dyn.predicteurs)})")
+    rapport = dyn.etat_maitrise()
+    n_maitrises = sum(1 for _, (_, m) in rapport.items() if m)
+    print(f"Accélérations maîtrisées : {n_maitrises}/{len(rapport)}  détail={rapport}")
+    print(f"(Contexte secondaire — sucres incidents : {monde.compteurs['sucre']}, "
+          f"bâtons : {monde.compteurs['baton']})")
     if args.checkpoint:
         print(f"Cerveau sauvegardé : {args.checkpoint} (relancer pour continuer)")
     if args.log:

@@ -1,15 +1,19 @@
-"""Harnais d'évaluation objective du POC SCL (non versionné dans le cœur théorique).
+"""Harnais d'évaluation ORIENTÉ ÉMERGENCE du POC SCL.
 
-Mesure ce que le projet cherche à voir émerger : capacité à manger (naviguer +
-gérer la vitesse), efficacité (steps par sucre = "détours"), évitement des
-bâtons, et progression de l'apprentissage (erreur globale des modules).
+Ne mesure plus « combien de sucres » (conséquence secondaire) mais la thèse :
+1. l'incertitude de la vision (reconstruction du champ statique) DESCEND ;
+2. une fois la vision maîtrisée, l'agent se met à AGIR (part de pas immobiles ↓) ;
+3. des prédicteurs de dynamique ÉMERGENT (créés sur surprise, un par accélération) ;
+4. leur incertitude descend à son tour → l'agent maîtrise son corps, région par
+   région (nb d'accélérations maîtrisées ↑).
 
-Usage : python3 -m scl.eval_poc --jours 10 --steps 300 --graines 1 2 3
+Usage : python3 -m scl.eval_poc --jours 15 --steps 300 --graines 1 2 3
 """
 import argparse
 
 import torch
 
+from . import curiosite
 from .boucle import EtatSCL, boucle_temps_reel, cycle_nocturne
 from .inne import construire_graphe_inne
 from .logger import set_temps
@@ -17,82 +21,71 @@ from .memoires import TableBesoins
 from .monde import Monde
 
 
-def evaluer(graine, n_jours, steps_par_jour, silencieux=True):
+def _inc_vision(graphe):
+    m = graphe.modules.get("vision")
+    return curiosite.incertitude(m) if m is not None else None
+
+
+def evaluer(graine, n_jours, steps_par_jour, trace_par_jour=None):
     graphe, discriminateur = construire_graphe_inne()
     monde = Monde(graine=graine)
-    table_besoins = TableBesoins()
-    etat = EtatSCL(graphe, discriminateur, monde, table_besoins)
+    etat = EtatSCL(graphe, discriminateur, monde, TableBesoins())
 
-    erreurs_par_jour = []
-    sucres_par_jour = []
-    batons_par_jour = []
-    sucre_precedent = 0
-    baton_precedent = 0
-
+    inc_vision_j0 = None
     for jour in range(n_jours):
         set_temps(jour=jour)
+        immobiles = 0
         for step in range(steps_par_jour):
             set_temps(step=step)
+            v_av = (int(monde.vitesse[0]), int(monde.vitesse[1]))
             boucle_temps_reel(etat, t=step)
+            if (int(monde.vitesse[0]), int(monde.vitesse[1])) == v_av == (0, 0):
+                immobiles += 1
         cycle_nocturne(etat, t=steps_par_jour)
-        s = monde.compteurs["sucre"] - sucre_precedent
-        b = monde.compteurs["baton"] - baton_precedent
-        sucre_precedent = monde.compteurs["sucre"]
-        baton_precedent = monde.compteurs["baton"]
-        sucres_par_jour.append(s)
-        batons_par_jour.append(b)
-        erreurs_par_jour.append(round(graphe.erreur_globale(), 5))
+        if inc_vision_j0 is None:
+            inc_vision_j0 = _inc_vision(graphe)
+        if trace_par_jour is not None:
+            rap = etat.dynamique.etat_maitrise()
+            trace_par_jour.append(dict(
+                jour=jour, inc_vision=round(_inc_vision(graphe), 4),
+                immobile=round(immobiles / steps_par_jour, 2),
+                n_pred=len(etat.dynamique.predicteurs),
+                n_maitrises=sum(1 for _, (_, m) in rap.items() if m)))
 
-    total_steps = n_jours * steps_par_jour
-    total_sucre = monde.compteurs["sucre"]
-    total_baton = monde.compteurs["baton"]
-    steps_par_sucre = (total_steps / total_sucre) if total_sucre else float("inf")
-    mp = etat.modele_prevision
-    err_prev = (sum(mp.erreur_recente) / len(mp.erreur_recente)) if mp.erreur_recente else None
-    n_appris = etat.compteur_mode["appris"]
+    rap = etat.dynamique.etat_maitrise()
     return {
         "graine": graine,
-        "sucres": total_sucre,
-        "batons": total_baton,
-        "steps_par_sucre": round(steps_par_sucre, 1),
-        "sucres_par_jour": sucres_par_jour,
-        "batons_par_jour": batons_par_jour,
-        "erreur_debut": erreurs_par_jour[0] if erreurs_par_jour else None,
-        "erreur_fin": erreurs_par_jour[-1] if erreurs_par_jour else None,
-        "n_modules": len(graphe.modules),
-        "prevision_err": round(err_prev, 5) if err_prev is not None else None,
-        "prevision_fiab": round(mp.fiabilite(), 3),
-        "frac_appris": round(n_appris / total_steps, 3),
+        "inc_vision_debut": round(inc_vision_j0, 4) if inc_vision_j0 is not None else None,
+        "inc_vision_fin": round(_inc_vision(graphe), 4),
+        "n_predicteurs": len(etat.dynamique.predicteurs),
+        "accels_apprises": sorted(list(a) for a in etat.dynamique.predicteurs),
+        "n_maitrises": sum(1 for _, (_, m) in rap.items() if m),
+        "detail_maitrise": rap,
+        "sucres_incidents": monde.compteurs["sucre"],
     }
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--jours", type=int, default=10)
+    p.add_argument("--jours", type=int, default=15)
     p.add_argument("--steps", type=int, default=300)
     p.add_argument("--graines", type=int, nargs="+", default=[1, 2, 3])
+    p.add_argument("--trace", action="store_true", help="trace jour par jour")
     args = p.parse_args()
 
     torch.manual_seed(0)
-    resultats = []
     for g in args.graines:
-        r = evaluer(g, args.jours, args.steps)
-        resultats.append(r)
-        print(f"[graine {g}] sucres={r['sucres']:3d} batons={r['batons']:3d} "
-              f"steps/sucre={r['steps_par_sucre']:6} "
-              f"err {r['erreur_debut']}→{r['erreur_fin']} "
-              f"modules={r['n_modules']}")
-        print(f"           sucres/jour={r['sucres_par_jour']}")
-        print(f"           modèle corps: err={r['prevision_err']} "
-              f"fiab={r['prevision_fiab']} frac_navig_appris={r['frac_appris']}")
-
-    n = len(resultats)
-    moy_sucre = sum(r["sucres"] for r in resultats) / n
-    moy_baton = sum(r["batons"] for r in resultats) / n
-    finis = [r["steps_par_sucre"] for r in resultats if r["steps_par_sucre"] != float("inf")]
-    moy_sps = (sum(finis) / len(finis)) if finis else float("inf")
-    print(f"\n=== MOYENNE ({n} graines) : sucres={moy_sucre:.1f} "
-          f"batons={moy_baton:.1f} steps/sucre={moy_sps:.1f} ===")
+        trace = [] if args.trace else None
+        r = evaluer(g, args.jours, args.steps, trace_par_jour=trace)
+        print(f"[graine {g}] vision {r['inc_vision_debut']}→{r['inc_vision_fin']} | "
+              f"prédicteurs dynamique={r['n_predicteurs']} "
+              f"(accels {r['accels_apprises']}) | maîtrisées={r['n_maitrises']} | "
+              f"sucres incidents={r['sucres_incidents']}")
+        if trace:
+            for d in trace:
+                print(f"   j{d['jour']:2d}: inc_vision={d['inc_vision']:.4f} "
+                      f"immobile={d['immobile']:.0%} n_pred={d['n_pred']} "
+                      f"maîtrisées={d['n_maitrises']}")
 
 
 if __name__ == "__main__":

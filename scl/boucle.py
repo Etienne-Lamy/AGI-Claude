@@ -18,10 +18,11 @@ from .attention import (
     entrainer_pointeurs, macro_pas,
 )
 from . import checkpoint as checkpoint_mod
+from . import curiosite
 from .config import CONFIG
 from .credit import amorcage_creation, regret_composition, rejeu_contrefactuel_nocturne
-from .decision_action import priorisation_besoin_dominant
 from .disponibilite import logique_acceptation
+from .dynamique import Dynamique
 from .inne import construire_graphe_inne, reflexe_frein
 from .logger import log, log_verbeux, set_temps
 from .memoires import (
@@ -29,7 +30,6 @@ from .memoires import (
     RegistreProvenance, RegistreRupture, TableBesoins, TableContexte,
 )
 from .monde import ACCELERATIONS_PERMISES, Monde
-from .prevision import ModelePrevisionCorps
 from .recherche import ValeurApprise, a_etoile_ancree
 from .statistiques import residu_module, sprt_creation, sprt_drift
 from .utils import ajuster_dim
@@ -54,8 +54,7 @@ class EtatSCL:
         self.decodeur = PointerNetwork()
         self.valeur_apprise = ValeurApprise()
         self.accumulateur_orchestrateur = AccumulateurOrchestrateur()
-        self.modele_prevision = ModelePrevisionCorps(v_max=monde.v_max)
-        self.compteur_mode = {"instinct": 0, "appris": 0}
+        self.dynamique = Dynamique()   # prédicteurs de dynamique du corps (émergents)
         self.jeu_apprentissage_gating = []
         self.trace_precedente = None
 
@@ -72,8 +71,7 @@ def charger_etat(chemin):
     # composant (ex. le modèle du corps) ne le contient pas — on le recrée pour
     # que la reprise multi-rounds d'un ancien cerveau.pkl ne casse jamais.
     defauts = {
-        "modele_prevision": lambda: ModelePrevisionCorps(v_max=etat.monde.v_max),
-        "compteur_mode": lambda: {"instinct": 0, "appris": 0},
+        "dynamique": lambda: Dynamique(),
     }
     for nom, fabrique in defauts.items():
         if getattr(etat, nom, None) is None:
@@ -103,74 +101,35 @@ def inputs_bruts(contexte_t):
     }
 
 
-# --------------------------------------------------------- sélection d'action (§15)
+# -------------------------------------------- sélection d'action par curiosité (§15.2)
 
-def _cellules_traversees(vx, vy):
-    """Cellules relatives franchies en un pas à la vitesse (vx, vy) — miroir
-    exact de la détection de collision de `monde.appliquer_action` (division
-    entière plancher), pour anticiper de la même façon un contact bâton."""
-    n_pas = int(max(abs(vx), abs(vy), 1))
-    return [((vx * i) // n_pas, (vy * i) // n_pas) for i in range(1, n_pas + 1)]
+def _incertitude_vision(g):
+    m = g.modules.get("vision")
+    return curiosite.incertitude(m) if m is not None else 0.0
 
 
-def _predire_vitesse(v, accel, v_max):
-    return (max(-v_max, min(v_max, int(v[0]) + accel[0])),
-            max(-v_max, min(v_max, int(v[1]) + accel[1])))
-
-
-def _penalite_baton(v_prime, batons_set):
-    """Pénalité si le pas prédit franchit un bâton (évitement, pas seulement
-    freinage réflexe une fois le choc subi)."""
-    if not batons_set:
-        return 0.0
-    for c in _cellules_traversees(v_prime[0], v_prime[1]):
-        if c in batons_set:
-            return CONFIG["penalite_baton_navigation"]
-    return 0.0
-
-
-def _scores_actions(monde, besoins, predire_vprime=None):
-    """Génération d'actions candidates (§15.3) par rollout à horizon 1 : chaque
-    accélération est évaluée sur la position PRÉDITE au pas suivant, pas sur
-    l'alignement de l'accélération seule. Conséquence clé : la vitesse courante
-    est prise en compte — l'agent freine pour atterrir sur le sucre au lieu de
-    le survoler (gestion de la vitesse, cœur du problème).
-
-    `predire_vprime` : accel → v' (vitesse prédite au pas suivant). Par défaut,
-    vérité-terrain du corps (`_predire_vitesse`, mode instinct) ; passer
-    `modele_prevision.predire` bascule la navigation sur le modèle APPRIS
-    (mode appris, §15.3 migration vers l'apprentissage). La perception étant
-    égocentrée, un sucre en (di,dj) devient (di−v'x, dj−v'y) après le pas —
-    seul v' change selon la source du modèle."""
-    v = monde.vitesse
-    v_max = monde.v_max
-    if predire_vprime is None:
-        predire_vprime = lambda accel: _predire_vitesse(v, accel, v_max)
-    sucres, batons = monde.objets_visibles()
-    batons_set = {(int(a), int(b)) for a, b in batons}
-    scores_faim, scores_ennui = {}, {}
+def _action_curieuse(etat, monde, g):
+    """Sélection d'action pilotée par la CURIOSITÉ (§4, §15.2) : choisir
+    l'accélération dont la conséquence est la MOINS bien prédite (incertitude
+    maximale = progrès d'apprentissage attendu maximal). Rester immobile (0,0)
+    vaut en plus l'incertitude de la vision — rester → champ statique → la
+    reconstruction progresse. Émergence : tant que la vision est incertaine,
+    rester gagne (elle maîtrise le champ statique) ; une fois maîtrisée, seules
+    les accélérations non encore maîtrisées restent incertaines → l'agent
+    explore la dynamique de son corps, région par région. Aucune coordonnée
+    d'objet, aucune géométrie de tâche."""
+    v = (int(monde.vitesse[0]), int(monde.vitesse[1]))
+    inc_vision = _incertitude_vision(g)
+    valeurs = {}
     for accel in ACCELERATIONS_PERMISES:
-        v_prime = predire_vprime(accel)
-        penalite = _penalite_baton(v_prime, batons_set)
-
-        # faim : minimiser la distance au sucre APRÈS déplacement (le sucre en
-        # (di,dj) devient (di-v'x, dj-v'y)) — atterrissage, pas survol.
-        if sucres:
-            dist_apres = min(((di - v_prime[0]) ** 2 + (dj - v_prime[1]) ** 2) ** 0.5
-                             for di, dj in sucres)
-            scores_faim[accel] = -dist_apres - penalite
-        else:
-            # aucun sucre en vue : explorer en gardant de l'élan (évite de se figer)
-            scores_faim[accel] = 0.3 * (abs(v_prime[0]) + abs(v_prime[1])) - penalite
-
-        # ennui : exploration — récompense le déplacement (roaming), évite les
-        # bâtons. [Placeholder assumé — voir STATUS 2026-07-18 : une curiosité
-        # naïve par nouveauté-de-cellule à 1 pas fait MOINS bien que ce roaming
-        # balistique pour la couverture ; le vrai "jeu" demande une exploration
-        # dirigée multi-pas, piste future.]
-        scores_ennui[accel] = (abs(v_prime[0]) + abs(v_prime[1])) - penalite
-
-    return {"faim": scores_faim, "ennui": scores_ennui}
+        val = etat.dynamique.incertitude_action(v, accel)
+        if accel == (0, 0):
+            val = max(val, inc_vision)
+        valeurs[accel] = val
+    accel = max(valeurs, key=valeurs.get)
+    log_verbeux("boucle", "action_curieuse", accel=list(accel),
+                incertitude=round(valeurs[accel], 4), inc_vision=round(inc_vision, 4))
+    return accel
 
 
 # ------------------------------------------------------------- entraînement local
@@ -276,40 +235,31 @@ def boucle_temps_reel(etat, t=0):
                             allocation=min(CONFIG["W"], len(T_t["ptr"])))
     etat.trace_precedente = trajectoire
 
-    # 1. réflexe câblé — TOUJOURS évalué en premier, prioritaire (§15.3)
+    # 1. réflexe câblé — garde-fou inné, TOUJOURS prioritaire (§15.3)
     commande_reflexe = reflexe_frein(contexte_t["proprio"][:2], etat.table_contexte.douleur)
 
-    # 2. sélection d'action par besoin dominant (jamais un mélange, §0/§15.3).
-    # Transfert instinct → appris (§15.1) : tant que le modèle du corps n'est
-    # pas fiable, la navigation utilise la vérité-terrain (instinct) ; une fois
-    # π du modèle au-dessus du seuil, elle utilise le modèle APPRIS — l'agent
-    # navigue alors avec sa propre représentation du corps.
-    fiab = etat.modele_prevision.fiabilite()
-    if fiab >= CONFIG["seuil_fiabilite_appris"]:
-        predire = lambda accel: etat.modele_prevision.predire(monde.vitesse, accel)
-        mode_nav = "appris"
+    # 2. sélection d'action par CURIOSITÉ (§15.2), hors réflexe : agir là où
+    # l'incertitude prédictive est la plus grande. Aucune valuation géométrique,
+    # aucune coordonnée d'objet — la compétence motrice émerge de la réduction
+    # d'incertitude sur les conséquences des actions.
+    if commande_reflexe is not None:
+        commande = commande_reflexe
     else:
-        predire = None
-        mode_nav = "instinct"
-    if hasattr(etat, "compteur_mode"):
-        etat.compteur_mode[mode_nav] = etat.compteur_mode.get(mode_nav, 0) + 1
-    scores = _scores_actions(monde, etat.table_besoins, predire_vprime=predire)
-    commande = priorisation_besoin_dominant(etat.table_besoins, scores, reflexe=commande_reflexe)
-    if commande is None:
-        commande = (0, 0)
+        commande = _action_curieuse(etat, monde, g)
 
     v_avant = (int(monde.vitesse[0]), int(monde.vitesse[1]))
     evenements = monde.appliquer_action(commande)
     etat.table_besoins.mettre_a_jour(evenements, vitesse_norme=vitesse_norme)
     etat.table_contexte.mettre_a_jour(evenements)
 
-    # apprentissage en ligne du modèle du corps (§1.3, auto-supervisé) : la
-    # cible est la vitesse réellement observée après l'action exécutée.
+    # apprentissage de la DYNAMIQUE : la transition réelle (v_avant, accel) →
+    # v_apres nourrit le prédicteur dédié à cette accélération, ou — si la
+    # surprise vs le prior « rien ne change » est confirmée (SPRT) — en fait
+    # NAÎTRE un (§4.5). C'est ici qu'émerge, région par région, la maîtrise du
+    # corps.
     accel_exec = (int(monde.derniere_accel[0]), int(monde.derniere_accel[1]))
     v_apres = (int(monde.vitesse[0]), int(monde.vitesse[1]))
-    err_prev = etat.modele_prevision.apprendre(v_avant, accel_exec, v_apres)
-    log_verbeux("boucle", "navigation", mode=mode_nav, fiabilite=fiab,
-                erreur_prevision=err_prev)
+    etat.dynamique.observer(v_avant, accel_exec, v_apres, t=t)
 
     _entrainer_localement(etat, contexte_t, inputs, ctx_vec, commande, t)
 
@@ -451,11 +401,13 @@ def main_loop(n_jours=3, steps_par_jour=500, graine=None, verbose=False, checkpo
         if checkpoint:
             sauvegarder_etat(checkpoint, etat)
         if verbose:
-            n_pas_tot = max(1, sum(etat.compteur_mode.values()))
+            dyn = etat.dynamique
+            n_maitrises = sum(1 for _, (_, m) in dyn.etat_maitrise().items() if m)
             log("boucle", "resume_journee", jour=jour,
                 sucres=etat.monde.compteurs["sucre"], batons=etat.monde.compteurs["baton"],
                 erreur_globale=etat.graphe.erreur_globale(), n_modules=len(etat.graphe.modules),
-                fiabilite_corps=round(etat.modele_prevision.fiabilite(), 3),
-                frac_navig_appris=round(etat.compteur_mode.get("appris", 0) / n_pas_tot, 3))
+                incertitude_vision=round(_incertitude_vision(etat.graphe), 4),
+                n_predicteurs_dynamique=len(dyn.predicteurs),
+                n_accels_maitrisees=n_maitrises)
 
     return etat

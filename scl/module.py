@@ -269,6 +269,42 @@ class Module:
         log(self.id, "entrainement_gen", erreur=e, grad_norme=grad_norme, lr=lr, phase=phase)
         return e
 
+    def entrainer_predictif(self, input_observe, cible_sortie, contexte_vec=None,
+                            t=0, phase="jour"):
+        """Entraînement conjoint reco+gen sur une paire (entrée → sortie) :
+        input → E → latent → G → sortie, perte = MSE(sortie, cible). Un seul
+        passage arrière à travers l'encodeur ET le décodeur du module (intra-
+        module, autorisé §0/§2.1, comme `module_visuel.entrainer_masque`).
+        Sert aux modules PRÉDICTEURS (ex. dynamique du corps : (v,accel) →
+        v_suivant) créés dynamiquement. Enregistre l'erreur (→ incertitude,
+        curiosite.py). Retourne l'erreur MSE."""
+        if self.locked_reco and self.locked_gen:
+            log(self.id, "entrainement_predictif_refuse", raison="locked")
+            return 0.0
+        params = self.parametres_reco() + self.parametres_gen()
+        for p in params:
+            p.grad = None
+        latent = self.forward_reconnaissance(
+            ajuster_dim(input_observe, self.n_inputs_reco).detach())
+        sortie = self.forward_generation(latent)[: self.n_outputs_gen]
+        realite = ajuster_dim(cible_sortie, self.n_outputs_gen).detach()
+        erreur = torch.mean((realite - sortie) ** 2)
+        erreur.backward()
+        grads_reco = [p.grad for p in self.parametres_reco()]
+        grads_gen = [p.grad for p in self.parametres_gen()]
+        self.incorporer_gradient(grads_reco, "reco", phase=phase)
+        self.incorporer_gradient(grads_gen, "gen", phase=phase)
+        lr = CONFIG["lr_normal"] if self.condensateur_reco < 0.5 else CONFIG["lr_lent"]
+        self._appliquer_accumulateur(self.parametres_reco(), self._g_reco, lr)
+        self._appliquer_accumulateur(self.parametres_gen(), self._g_gen, lr)
+        e = float(erreur.detach())
+        self.tentatives_count += 1
+        self.meilleure_erreur_reco = min(self.meilleure_erreur_reco, e)
+        self.meilleure_erreur_gen = min(self.meilleure_erreur_gen, e)
+        self._enregistrer_erreur(contexte_vec, e, t)
+        log(self.id, "entrainement_predictif", erreur=e, phase=phase)
+        return e
+
     def _enregistrer_erreur(self, contexte_vec, erreur, t):
         self.error_history.append((None if contexte_vec is None
                                    else contexte_vec.detach().clone(), erreur, t))

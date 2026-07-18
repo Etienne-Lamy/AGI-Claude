@@ -6,3 +6,7 @@ __pycache__/
 # artefacts d'exécution du POC (logs d'audit, checkpoints) — jamais versionnés
 *.jsonl
 *.pkl
+
+# fichiers temporaires d'éditeur
+*.swp
+*~

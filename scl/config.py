@@ -92,6 +92,11 @@ CONFIG = dict(
     seuil_incertitude_maitrise=0.02,# incertitude sous laquelle un module est "maîtrisé"
     seuil_progres_maitrise=0.005,   # progrès sous lequel on considère le plateau atteint
 
+    # --- dynamique du corps (dynamique.py) : prédicteurs action-conditionnés ---
+    n_latent_dynamique=4,           # latent d'un prédicteur (v → v_suivant)
+    attrait_action_inexploree=0.1,  # incertitude d'une accélération jamais tentée (attrait de découverte)
+    sigma_prior_dynamique=0.5,      # confiance du prior "rien ne change" (petit ⇒ un vrai Δv surprend)
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,
