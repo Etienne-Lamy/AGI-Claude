@@ -120,6 +120,55 @@ class ModuleAutoencodeur:
                     perte=float(perte.detach()))
         return err
 
+    # ------------------------------------------------ prédiction de transition
+    def entrainer_transition(self, x_prec, x_present):
+        """Entraîne enc+dec à prédire le champ PRÉSENT à partir du champ
+        PRÉCÉDENT : enc(x_prec) → dec → classes de x_present. Même réseau que la
+        reconstruction, cible différente. À vitesse fixe, x_present est x_prec
+        DÉCALÉ de la vitesse — le module apprend ce décalage, donc sa fiabilité
+        est un INDICATEUR DE VITESSE (haute à la vitesse d'entraînement, basse
+        ailleurs). Buffer de PAIRES dédié. Retourne l'erreur cellule."""
+        if not hasattr(self, "_buffer_trans"):
+            self._buffer_trans = deque(maxlen=CONFIG["taille_buffer_vision"])
+        h, w = self.resolution
+        self._buffer_trans.append((self._img(x_prec).squeeze(0),
+                                   self._img(x_present).squeeze(0)))
+        n = min(len(self._buffer_trans), CONFIG["taille_lot_vision"])
+        paires = random.sample(list(self._buffer_trans), n)
+        prec = torch.stack([a for a, _ in paires])                # (n,1,h,w)
+        pres = torch.stack([b for _, b in paires])
+        classes = _vers_classes(pres.reshape(n, h * w)).reshape(n, h, w)
+        logits = self.dec(self.enc(prec))
+        perte = torch.nn.functional.cross_entropy(
+            logits.permute(0, 2, 3, 1).reshape(-1, self.n_classes),
+            classes.reshape(-1), weight=self.poids_classe)
+        self.opt.zero_grad()
+        perte.backward()
+        self.opt.step()
+        with torch.no_grad():
+            pred = self.dec(self.enc(self._img(x_prec))).argmax(1).reshape(-1)
+            err = 1.0 - float((pred == _vers_classes(self._img(x_present).reshape(-1))).float().mean())
+        self.erreurs.append(err)
+        return err
+
+    def predire(self, x_prec):
+        """Champ présent prédit à partir du champ précédent (sur CPU)."""
+        return self.generer(self.encoder(x_prec)).cpu()
+
+    def fidelite_transition(self, x_prec, x_present):
+        """Rappel/précision de la PRÉDICTION x_prec→x_present (indicateur de
+        vitesse : élevé à la vitesse d'entraînement)."""
+        with torch.no_grad():
+            cl_pred = self.dec(self.enc(self._img(x_prec))).argmax(1).reshape(-1)
+        cl_cible = _vers_classes(self._img(x_present).reshape(-1))
+        obj_c, obj_p = cl_cible > 0, cl_pred > 0
+        n_obj, n_pred = int(obj_c.sum()), int(obj_p.sum())
+        rappel = int(((cl_pred == cl_cible) & obj_c).sum()) / n_obj if n_obj else 1.0
+        precision = int(((cl_pred == cl_cible) & obj_p).sum()) / n_pred if n_pred else 0.0
+        exactitude = float((cl_pred == cl_cible).float().mean())
+        return {"rappel": round(rappel, 3), "precision": round(precision, 3),
+                "exactitude": round(exactitude, 3)}
+
     # -------------------------------------------------------------- métriques
     def fidelite(self, x):
         """Sur les cellules-objets de la cible, fraction dont la CLASSE est
