@@ -18,40 +18,17 @@ from urllib.parse import parse_qs, urlparse
 # F1-F25 (choix_mode, chantier_*, barreaux, consolidation_hebbienne...)
 # n'existe plus, les mécanismes correspondants ont été remplacés.
 ACTIONS_UTILES = {
-    # cycle de vie des modules
-    "creation_module", "creation_candidat", "creation_simulateur",
-    "initialisation_episode_fondateur", "copie_module", "retrait_module",
-    "atrophie_abandon", "confirmation_reelle",
-    # apprentissage local
-    "entrainement_reco", "entrainement_gen", "entrainement_masque",
-    "entrainement_proprio", "entrainement_action", "entrainement_simulateur",
-    "condensateurs", "verrouillage", "disponibilite_anticipee",
-    "logique_acceptation", "croissance", "croissance_gouvernee",
-    "saturation_detectee",
-    # structure du graphe
-    "ajout_module", "localiser_point_branchement", "test_non_inferiorite",
-    "fragmentation", "decoupe", "decoupe_impossible", "valider_decoupe",
-    "committer_chemin", "recalage_plancher_drift", "controle_multiplicite",
-    "rejet_gouverne",
-    # statistiques / SPRT
-    "sprt_surprise", "sprt_creation", "sprt_drift", "surprise_validee",
-    # attention / orchestrateur (Set Transformer + Pointer Network)
-    "construire_T_t", "macro_pas", "executer_triplet", "entrainement_pointeurs",
-    "accumulateur_orchestrateur", "role_creation", "allouer_capacite",
-    # décision / action
-    "priorisation_besoin_dominant", "action_par_reflexe", "declenchement",
-    "besoin_dominant_change", "changement_etat",
-    # mémoire, crédit, recherche
-    "amorcage_creation", "regret_composition", "rejeu_contrefactuel_nocturne",
-    "maturation_prediction", "generer_contrefactuel", "est_hors_distribution",
-    "recuperation", "recuperation_refusee", "a_etoile_trouve", "a_etoile_echec",
-    "ancrer_composition", "ancrer_composition_refusee",
-    # nuit
-    "reve_coordonne", "cycle_nocturne_termine", "entrainement_contrastif",
-    "entrainement_v_psi",
-    # boucle / monde / persistance
-    "action_appliquee", "resume_journee", "sauvegarde", "chargement",
-    "creation_refusee", "creation_refusee_cooldown", "abandon_marque",
+    # instantané principal de l'agent (vocabulaire v6 : émergence par curiosité)
+    "pouls",
+    # émergence de la dynamique du corps
+    "creation_predicteur",
+    # cycle de vie des modules (graphe)
+    "creation_candidat", "creation_module", "verrouillage", "atrophie_abandon",
+    "confirmation_reelle",
+    # bilan quotidien
+    "resume_journee",
+    # persistance
+    "sauvegarde", "chargement",
 }
 MAX_LIGNES_PAR_REQUETE = 8000
 

@@ -96,6 +96,7 @@ CONFIG = dict(
     n_latent_dynamique=4,           # latent d'un prédicteur (v → v_suivant)
     attrait_action_inexploree=0.1,  # incertitude d'une accélération jamais tentée (attrait de découverte)
     sigma_prior_dynamique=0.5,      # confiance du prior "rien ne change" (petit ⇒ un vrai Δv surprend)
+    periode_pouls=3,                # cadence (en pas) de l'instantané "pouls" pour le dashboard
 
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---

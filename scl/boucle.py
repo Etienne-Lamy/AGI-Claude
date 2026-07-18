@@ -308,9 +308,45 @@ def boucle_temps_reel(etat, t=0):
                                 contexte=ctx_vec, signature_anomalie="rupture", t=t, type_="rupture")
                             amorcage_creation(nouveau_module, ctx_vec, etat.jeu_apprentissage_gating)
 
+    if t % CONFIG["periode_pouls"] == 0:
+        _emettre_pouls(etat, monde, g, contexte_t, commande, t)
     log_verbeux("boucle", "pas_temps_reel", t=t, commande=commande,
                besoin_dominant=etat.table_besoins.besoin_dominant())
     return commande
+
+
+def _emettre_pouls(etat, monde, g, contexte_t, commande, t):
+    """Instantané compact de l'agent (non verbeux, cadence `periode_pouls`) —
+    tout ce qu'il faut au dashboard pour montrer l'émergence : champ visuel VU
+    vs PRÉVU (reconstruction), incertitude vision, incertitudes de dynamique
+    par accélération, position/vitesse, action choisie. Un seul type
+    d'événement à consommer côté viewer."""
+    vision = g.modules.get("vision")
+    champ_vu, champ_prevu = None, None
+    if vision is not None and vision.dernier_latent is not None:
+        c, h, w = vision.resolution
+        with torch.no_grad():
+            # chaînes compactes (les listes sont tronquées à 40 par le logger) :
+            # dernière frame VUE vs dernière frame de la RECONSTRUCTION.
+            vu = contexte_t["vision"][-1].reshape(-1).tolist()
+            recon = vision.forward_generation(vision.dernier_latent)[: c * h * w]
+            prevu = recon[-h * w:].tolist()
+            champ_vu = ",".join(f"{x:.2f}" for x in vu)
+            champ_prevu = ",".join(f"{float(x):.2f}" for x in prevu)
+    dyn = {f"{a[0]},{a[1]}": round(etat.dynamique.incertitude_action(
+              (int(monde.vitesse[0]), int(monde.vitesse[1])), a), 4)
+           for a in ACCELERATIONS_PERMISES}
+    rap = etat.dynamique.etat_maitrise()
+    log("agent", "pouls", t=t,
+        position=[int(monde.agent_pos[0]), int(monde.agent_pos[1])],
+        vitesse=[int(monde.vitesse[0]), int(monde.vitesse[1])],
+        action_choisie=[int(commande[0]), int(commande[1])],
+        inc_vision=round(_incertitude_vision(g), 4),
+        dyn_incertitude=dyn,
+        n_predicteurs=len(etat.dynamique.predicteurs),
+        n_maitrises=sum(1 for _, (_, m) in rap.items() if m),
+        resolution=list(vision.resolution) if vision is not None else None,
+        champ_vu=champ_vu, champ_prevu=champ_prevu)
 
 
 # ------------------------------------------------------------------ cycle nocturne
