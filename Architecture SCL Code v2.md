@@ -600,9 +600,15 @@ Principe directeur (parcimonie, §5) :
   **reproduit l'épisode dans la tolérance qui compte**. Sinon, monter d'un cran
   vers le brut (latent → latent+masques → champ) — arbitrage par MDL entre les
   variantes de stockage.
-- **Carte mentale / lieux** : un lieu = une **signature compressée récurrente**.
-  Le module créé dessus peut dormir ; le revoir = un module dormant qui retrouve
-  soudain un `G` élevé → **reconnaissance**. C'est la même mesure qu'en 29.1.
+- **Reconnaissance = mécanisme GÉNÉRAL** (pas seulement les lieux) : *toute
+  signature compressée récurrente* peut porter un module — un lieu, un objet, une
+  configuration, un régime de dynamique, une séquence d'actions, une situation
+  entière. Le module créé dessus peut **dormir** (coût nul, §10.7 activation
+  creuse) ; le signal réapparaît → son `G` **remonte brutalement** → **réveil**.
+  Reconnaître, se souvenir et identifier un régime sont donc **la même mesure**
+  (celle de 29.1) appliquée à des niveaux différents de la hiérarchie. Conséquence
+  pratique : un seul mécanisme à implémenter (balayage du `G` des modules dormants),
+  pas un système de mémoire séparé par type de contenu.
 
 ### 29.6 Ordre d'implémentation suggéré
 
@@ -613,6 +619,69 @@ Principe directeur (parcimonie, §5) :
    par l'action. C'est la prochaine **émergence démontrable**.
 4. Courbe `G(h)` et horizons (29.3).
 5. Mémoire épisodique par résidu (29.5), qui alimente le cycle nocturne.
+
+
+---
+
+## 30. Planifier = composer des FONCTIONS (pas combiner linéairement)
+
+Cadrage donné par l'auteur, structurant pour l'orchestrateur : **prévoir le futur
+ressemble à écrire du code**. Les modules sont des **fonctions** ; un plan est un
+**programme** qui les compose. C'est pourquoi l'orchestrateur est pensé comme un
+**LLM à attention** : son travail est d'**émettre la suite d'instructions**, pas de
+calculer le résultat.
+
+### 30.1 Composition, jamais mélange
+
+    plan = m_k ∘ … ∘ m_2 ∘ m_1        (composition)
+    ✗ plan = Σ w_i · m_i               (combinaison linéaire)
+
+Raison empirique, pas esthétique : nos modules sont **spécialisés** (un par régime).
+Les moyenner détruit exactement ce qui fait leur valeur — un module-vitesse
+« moyen » ne prédit aucun régime. Un spécialiste se **sélectionne et s'applique**.
+Le mélange pondéré n'est légitime **que** sur le continu perception↔prédiction
+(§15.1), jamais entre modules.
+
+### 30.2 Un plan est un programme
+
+| notion programmatique | équivalent SCL |
+|---|---|
+| instruction | triplet `(source, opérateur, cible)` (§10.2) |
+| variable / registre | latent d'un module, module **délai** pour `T-1`, `T-2` |
+| appel de fonction | appliquer un module à un latent |
+| **typage** | masquage de compatibilité de type (§10.2, §10.5) — une composition mal typée est interdite avant d'être tentée |
+| branchement conditionnel | **une branche par action candidate** (§29.3) |
+| boucle / itération | ré-appliquer le module de transition pour `T+2`, `T+3`… |
+| sous-programme nommé | composition fréquente **consolidée en un module** (§9, `consolidation_n_vers_un`) — la macro devient une primitive |
+| coût d'exécution | budget d'attention (§13), activation creuse (§10.7) |
+
+Le **typage** est la vraie garde-fou : il rend la plupart des programmes absurdes
+**impossibles à écrire**, ce qui réduit énormément l'espace de recherche de
+l'orchestrateur. À traiter comme une contrainte dure, pas comme une pénalité.
+
+### 30.3 Ce que l'orchestrateur doit apprendre à émettre
+
+Pas une valeur : une **séquence**. Son entrée est l'état courant (`T_t` : latents
+disponibles, fiabilités, besoins, verrous) ; sa sortie est le **prochain triplet**.
+L'attention sert à choisir *sur quoi* opérer parmi des dizaines de modules
+disponibles — exactement le rôle d'un pointeur dans un LLM. Deux régimes :
+
+- **Jour (temps réel)** : émettre le programme le plus court qui prédit `T+1` ;
+  budget serré, activation creuse.
+- **Nuit (au calme)** : dérouler des programmes plus longs et **branchés**
+  (plusieurs actions), sur des épisodes rejoués depuis la mémoire (§29.5),
+  et **consolider** les compositions qui reviennent souvent en nouveaux modules
+  (§30.2, ligne « sous-programme »).
+
+### 30.4 Critère de valeur d'un programme
+
+Un programme vaut ce que vaut sa **prédiction**, corrigée de son **coût** :
+
+    valeur(programme) = G(prédiction) − λ · coût(programme)
+
+où `coût` compte les modules activés (§13). C'est la même parcimonie qu'au §5,
+appliquée non plus à la taille d'un module mais à la **longueur du programme** —
+et c'est ce qui pousse naturellement à consolider les macros utiles.
 
 
 ---
