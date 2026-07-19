@@ -422,3 +422,75 @@ Le cœur de l'orchestrateur : Set Transformer en entrée, Pointer Network en sor
 | `primitives_isa`, `garde_fou_domaine`, `composition_sure` | `operateurs_natifs.py` | §14 |
 | `fusion_ponderee`, `recompense_intrinseque`, `priorisation_besoin_dominant`, `generer_actions_candidates`, `reflexe_cable` | `decision_action.py` | §15 |
 | `residu_normalise`, `sprt_surprise`, `sprt_creation`, `sprt_drift`, `controle_fdr`, `cadence_variable` | `statistiques.py` | §4, M1, M10 |
+
+---
+
+## 27. Orchestrateur — contraintes établies et boîte à outils (maj 2026-07-19)
+
+Section ajoutée d'un commun accord après reprise « étape par étape ». Elle fige
+les contraintes retenues (théorie + vérifié empiriquement) et le catalogue
+d'outils que l'orchestrateur devra, à terme, savoir créer/choisir/composer. Le
+choix parmi ces outils est **naïf** (catalogue + MDL) au départ, **appris par
+renforcement** ensuite selon le contexte.
+
+### 27.1 Contraintes
+
+**Apprentissage.** Local, aucun gradient global entre modules (§2). **Parcimonie/
+MDL est le moteur** (§5) : un module doit RÉDUIRE ses entrées/sorties (goulot) ;
+la taille INTERNE peut être grosse (générateur de qualité), seul le goulot compte.
+Un champ discret se reconstruit par **classification par cellule pondérée** (sinon
+effondrement à zéro, cf. échec README). Pour des données positionnelles, mettre de
+la **convolution AVANT le goulot** (un MLP pur plafonne ~44 %).
+
+**Modules.** Objet générique **détecteur/générateur (E, G)**, GPU, chargeable/
+**dormant**, réactivable (§1.3). Portent une **incertitude/fiabilité** = indicateur
+de contexte (ex. vitesse : fiabilité 84 % à la vitesse d'entraînement vs ~20 %
+ailleurs — vérifié). Verrouillage **asymétrique** (plancher, jamais plafond, §1.4).
+
+**Création & structure.** Déclenchée par **surprise confirmée (SPRT)**, jamais un
+calendrier (§4.5). Cascade coût-croissant réparation → composition → création.
+**Discriminateur D_φ partagé** (§5). Cycle **jour/nuit** (§8).
+
+**Orchestration.** L'orchestrateur **compose, ne calcule jamais** lui-même (§10.2).
+Toute composition **s'ancre à un point vérifiable** (§7.4). **Activation creuse**
+(§10.7). Le **choix d'architecture/dimension est une ACTION** de l'orchestrateur
+(catalogue + MDL, naïf puis RL — `orchestrateur_naif.essayer_catalogue`, vérifié :
+sur [8..96] le MDL choisit dim=48).
+
+**Matériel.** Titan Black (Kepler) : watchdog GPU → **un module entraîné à la fois**.
+
+### 27.2 Boîte à outils cible (types de modules)
+
+| outil | rôle | fichier / état |
+|---|---|---|
+| **Compresseur** (E,G) | champ → latent réduit → champ (goulot, classif. pondérée) | `module_ae.py` ✅ (~90 %) |
+| **Prédicteur/transition** | latent/champ P-1 → P ; fiabilité = indicateur de vitesse | `module_ae.py` ✅ (84 %) |
+| **Attention/masquage** | sélectionne une région/un objet du champ → **plusieurs modules spécialisés** → latent STRUCTURÉ (liste d'objets) → prédiction triviale | ❌ à faire *(slot-attention ; clé vision)* |
+| **Mémoire de lieu** | stocke une signature compressée, dormante, **réactivée** au revisit (carte mentale) | ❌ à faire |
+| **Discriminateur** D_φ | plausibilité réel/halluciné | `discriminateur.py` ✅ |
+| **Simulateur** S_new | mémoire épisodique générative (rejeu nocturne) | `simulateur.py` ✅ |
+
+*(Opérateurs natifs §14 : écartés — non nécessaires pour ce POC.)*
+
+### 27.3 Opérations (les « verbes » de l'orchestrateur)
+
+- **Créer** un module : choisir *(type, dimension, entrée-source)* et sélectionner
+  par **MDL** (`essayer_catalogue`). Naïf ✅ pour la dimension ; type/source à ajouter.
+- **Composer** : triplets (source, opérateur, cible) via Pointer Network (§10.2 ;
+  machinerie présente, pas encore pilote de l'action).
+- **Router/masquer** : activation creuse ; **réactiver un module dormant** sur
+  correspondance de contexte.
+- **Cycle de vie** : verrouiller, fragmenter/découper, consolider (n→1), atrophier,
+  endormir/réveiller (§9 ; code présent, pas branché).
+- **Évaluer** : MDL, fiabilité, surprise (SPRT), regret de composition.
+- **Méta (RL, plus tard)** : apprendre *quel* outil/dimension/composition choisir
+  selon le contexte.
+
+### 27.4 Schéma cible pour la vision
+
+Pas un compresseur global unique (latent opaque → prédiction dure, vérifié : chaîne
+1→2→1 à 57 %), mais :
+`champ → attention (masque) → N compresseurs spécialisés (1 / objet-région) →
+latent STRUCTURÉ (liste d'objets) → prédiction triviale (position → position+v)`.
+C'est la **slot-attention** posée comme **outil composable**, pas comme réseau
+monolithique.
