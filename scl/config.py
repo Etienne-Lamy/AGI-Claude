@@ -109,6 +109,10 @@ CONFIG = dict(
     taille_buffer_vision=512,       # mémoire de rejeu (frames récentes) pour stabiliser l'apprentissage
     taille_lot_vision=32,           # taille du mini-lot entraîné à chaque pas (en ligne mais stable)
 
+    # --- orchestrateur naïf : catalogue de dimensions + sélection MDL (§5) ---
+    catalogue_dims_module=[8, 16, 32, 48, 64, 96],   # tailles de goulot à essayer
+    bits_par_dim_mdl=0.5,           # coût (bits) d'une dimension du code compressé (pression de parcimonie)
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,

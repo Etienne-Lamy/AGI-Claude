@@ -176,6 +176,21 @@ class ModuleAutoencodeur:
     def fiabilite(self):
         return 1.0 - self.incertitude()
 
+    def cout_residuel_bits(self, champs):
+        """L(data|modèle) pour le MDL (§5) : entropie croisée moyenne PAR CHAMP,
+        en BITS (nombre de bits pour coder le vrai champ sachant la prédiction du
+        module). Petit = le module explique bien les données."""
+        import math
+        tot = 0.0
+        for f in champs:
+            cible = self._img(f)
+            cl = _vers_classes(cible.reshape(-1))
+            with torch.no_grad():
+                logp = torch.log_softmax(
+                    self._logits(cible).permute(0, 2, 3, 1).reshape(-1, self.n_classes), -1)
+            tot += -float(logp[torch.arange(len(cl), device=cl.device), cl].sum()) / math.log(2)
+        return tot / len(champs)
+
     # ------------------------------------------------ charge/décharge mémoire
     def etat(self):
         return {"enc": {k: v.cpu() for k, v in self.enc.state_dict().items()},
