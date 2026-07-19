@@ -1,5 +1,43 @@
 # État des lieux — POC SCL (2026-07-03)
 
+## Mise à jour 2026-07-19 — PRINCIPES RECADRÉS + étapes 1-3 (module compressant, MDL)
+
+Principes clarifiés par l'auteur (à ne plus perdre) :
+1. **Parcimonie/MDL (§5)** : un module DOIT réduire son E/S (sortie < entrée) —
+   le calcul travaille sur de l'abstraction à valeur, pas du signal brut. La
+   taille INTERNE peut être grosse (générateur de qualité) ; seul le GOULOT compte.
+2. **Le choix de l'architecture (dimension) EST l'action de l'orchestrateur**, pas
+   quelque chose à fixer à la main : un CATALOGUE de dimensions, on essaie, on
+   garde par MDL. Naïf d'abord, puis appris par renforcement selon le contexte.
+3. **L'orchestrateur crée des modules sur l'entrée COMPRESSÉE, pour mémoriser** :
+   carte mentale = modules créés sur des lieux revisités, DORMANTS, réactivés à la
+   pensée/au retour. (À implémenter.)
+
+**Étape 1 — module compressant. FAIT.** `scl/module_ae.py` : conv + GOULOT dense,
+sortie `dim_latent=64 < 100` valeurs, reconstruction F1≈90 % (classification par
+cellule, CE pondérée, GPU). Diagnostic : un MLP pur plafonne (~44 %), la conv
+avant le goulot est la clé. (Ancienne version conv pleine-résolution EXPANSAIT
+300>100 — corrigé.)
+
+**Étape 2a — prédiction/indicateur de vitesse. FAIT.** `entrainer_transition`
+(champ P-1→P). Prédicteur entraîné à v=(1,1) : rappel 84 % à (1,1) vs ~20 %
+ailleurs → la fiabilité est un indicateur de vitesse. NB : la prédiction dans le
+latent compressé OPAQUE est plus dure (chaîne 1→2→1 à 57 %) — pour une prédiction
+triviale (x→x+1) il faut un latent STRUCTURÉ (positions d'objets). Slots-objets
+essayés (rendu naïf ET spatial-softmax) : plafonnent à ~21 % — vrai problème
+« slot attention », ouvert.
+
+**Étape 3 — orchestrateur NAÏF, choix de taille par MDL. FAIT.**
+`scl/orchestrateur_naif.essayer_catalogue` + `scl/etape3_catalogue`. Sur catalogue
+[8..96], le MDL choisit **dim=48** (rappel 80 %) — ni trop petit (reconstruit mal)
+ni trop grand (code gaspillé). `bits_par_dim_mdl` = pression de parcimonie (que le
+RL modulera). Commande : `python3 -m scl.etape3_catalogue --pas 2000`.
+
+**Prochaines étapes** : (a) modules-mémoire sur l'entrée compressée (carte mentale,
+dormance/réactivation) ; (b) latent structuré en objets (slot-attention) pour la
+prédiction triviale ; (c) orchestrateur qui compose les modules + RL du choix.
+203 tests verts.
+
 ## Mise à jour 2026-07-18 (nuit) — REPRISE ÉTAPE PAR ÉTAPE. ÉTAPE 1 (vision) VALIDÉE
 
 L'auteur a recadré : la couche « curiosité/dynamique » précédente ne validait pas
