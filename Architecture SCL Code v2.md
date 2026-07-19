@@ -673,7 +673,24 @@ disponibles — exactement le rôle d'un pointeur dans un LLM. Deux régimes :
   et **consolider** les compositions qui reviennent souvent en nouveaux modules
   (§30.2, ligne « sous-programme »).
 
-### 30.4 Critère de valeur d'un programme
+### 30.4 Exécuter le programme = prévoir plus loin
+
+Une fois la règle `(régime, action) → régime` apprise (N3), **prévoir à T+h ne demande
+aucun mécanisme nouveau** : on **exécute le programme**, c'est-à-dire on itère la règle
+sur une séquence d'actions. Deux conséquences directes :
+
+- l'**horizon naturel** n'est pas un paramètre à choisir mais une **grandeur mesurée** :
+  la courbe `G(h)` décroît (les erreurs se composent) et là où elle s'annule, empiler
+  ne sert plus à rien ;
+- une **branche** = une séquence d'actions différente donnée au même programme. Les
+  futurs imaginés ne coûtent que le déroulé de la règle — c'est très bon marché
+  puisque N2/N3 sont discrets et de faible cardinalité (§29.2).
+
+Ce point justifie a posteriori la forme « programme » : si le futur était prédit par
+un réseau monolithique, changer d'action demanderait un nouveau passage complet sur le
+signal brut ; en composition, on ne rejoue que quelques symboles.
+
+### 30.5 Critère de valeur d'un programme
 
 Un programme vaut ce que vaut sa **prédiction**, corrigée de son **coût** :
 
