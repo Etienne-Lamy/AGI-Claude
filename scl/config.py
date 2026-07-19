@@ -113,6 +113,10 @@ CONFIG = dict(
     catalogue_dims_module=[8, 16, 32, 48, 64, 96],   # tailles de goulot à essayer
     bits_par_dim_mdl=0.5,           # coût (bits) d'une dimension du code compressé (pression de parcimonie)
 
+    # --- classification émergente (classification_emergente.py, VQ) ---
+    k_max_categories=6,             # nb max de catégories d'éléments (les inutiles sont élaguées)
+    canaux_categorie=8,             # dim du code d'apparence par cellule
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,

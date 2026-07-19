@@ -463,6 +463,7 @@ sur [8..96] le MDL choisit dim=48).
 
 | outil | rôle | fichier / état |
 |---|---|---|
+| **Classification émergente** (VQ) | découvre SANS étiquette les SORTES d'éléments (codebook, catégories utilisées émergent, inutiles élaguées) ; chaque catégorie = module identifie+régénère (« un sucre »). Base de la reconstruction/objets. | `classification_emergente.py` ✅ (4 catégories 100 % pures, reconstruction 100 %) |
 | **Compresseur** (E,G) | champ → latent réduit → champ (goulot, classif. pondérée) | `module_ae.py` ✅ (~90 %) |
 | **Prédicteur/transition** | latent/champ P-1 → P ; fiabilité = indicateur de vitesse | `module_ae.py` ✅ (84 %) |
 | **Attention/masquage** | sélectionne une région/un objet du champ → **plusieurs modules spécialisés** → latent STRUCTURÉ (liste d'objets) → prédiction triviale | ❌ à faire *(slot-attention ; clé vision)* |
@@ -489,8 +490,16 @@ sur [8..96] le MDL choisit dim=48).
 ### 27.4 Schéma cible pour la vision
 
 Pas un compresseur global unique (latent opaque → prédiction dure, vérifié : chaîne
-1→2→1 à 57 %), mais :
-`champ → attention (masque) → N compresseurs spécialisés (1 / objet-région) →
-latent STRUCTURÉ (liste d'objets) → prédiction triviale (position → position+v)`.
-C'est la **slot-attention** posée comme **outil composable**, pas comme réseau
-monolithique.
+1→2→1 à 57 %), mais un enchaînement d'outils GÉNÉRIQUES :
+`champ → CLASSIFICATION ÉMERGENTE (VQ : découvre les types d'éléments) →
+ATTENTION/MASQUE (groupe les cellules d'un même type non-fond en OBJETS) →
+latent STRUCTURÉ (liste d'objets typés) → prédiction triviale (position → position+v)`.
+
+**Dette technique à résorber (codage en dur à retirer)** : l'outil attention actuel
+(`module_attention.py`) reconstruit via une **tête de classification à 4 classes
+DONNÉES** (`VALEURS`), et la « liste d'objets » lit ce champ classifié — les types
+sont donc imposés, pas émergents. À remplacer : l'attention doit se construire sur
+les **catégories émergentes** de `classification_emergente.py` (aucune classe
+donnée). Principe (Architecture) : on ne programme que du générique ; toute
+adaptation manuelle (ici, la tête 4-classes) doit être documentée comme dette et
+remplacée par l'outil émergent correspondant.
