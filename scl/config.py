@@ -117,6 +117,17 @@ CONFIG = dict(
     k_max_categories=6,             # nb max de catégories d'éléments (les inutiles sont élaguées)
     canaux_categorie=8,             # dim du code d'apparence par cellule
 
+    # --- composition de modules / détection de vitesse (composition.py) ---
+    # résidu latent RELATIF au prior trivial "rien ne change" (sans unité) :
+    # au-dessus de ce seuil, le module n'explique pas mieux que le trivial → régime inexpliqué
+    seuil_surprise_composition=0.8,   # EMA du résidu relatif au-dessus : régime inexpliqué → naissance
+    ema_stats_latent=0.99,            # lissage des stats (moy/var) de normalisation du latent
+    plafond_residu_composition=5.0,   # borne du résidu relatif (queue lourde → décision instable sans borne)
+    ema_residu_composition=0.97,      # lissage du résidu de décision (= surprise "confirmée", §4.5)
+    grace_creation_composition=400,   # pas de grâce après une naissance (le nouveau-né apprend d'abord)
+    maturite_module_vitesse=250,      # pas d'entraînement avant de pouvoir verrouiller un module-vitesse
+    seuil_maturite_vitesse=0.6,       # résidu relatif lissé sous lequel le module est jugé compétent → VERROUILLÉ (§1.4)
+
     # --- statistiques : SPRT (surprise / création / drift), FDR, cadence
     # (statistiques.py, §4, M1, M10, Phase 5) ---
     alpha_sprt_surprise=0.05, beta_sprt_surprise=0.10,
