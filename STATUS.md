@@ -77,7 +77,7 @@ Chaque étape a un harnais reproductible. Les chiffres sont mesurés, pas estim�
 | 6 | **Composition qui DÉTECTE la vitesse** | `composition.py` | `python3 -m scl.etape6_composition --pas_regime 1500` | 4 modules nés, **3/3 régimes couverts**, les 2 niveaux concordent |
 | 7 | **Hiérarchie N2→N3** : action → changement de régime | `hierarchie.py` | `python3 -m scl.etape7_hierarchie` | exactitude **57 %** vs trivial **38 %** → **gain +31 %** ; règle lisible et physiquement correcte sur les régimes bien séparés |
 | 8 | **Horizons T+h + branches** | `etape8_horizons.py` | `python3 -m scl.etape8_horizons --horizon 8` | G(h)=+17/+28/+26/+18/+6/+1/+4/−3 % → **horizon naturel T+5** (mesuré, pas choisi) ; branches correctes (saturation à v_max) |
-| 9 | **Vent : localiser l'échec** ⚠ partiel | `etape9_vent.py` | `python3 -m scl.etape9_vent --vent 0 2` | signature §29.4 obtenue (N1 +0.03 **intact**, N2 −0.34 **effondrée**) mais **variable selon les runs** et **aucune naissance** — à reprendre |
+| 9 | **Vent : localiser l'échec** ⚠ partiel | `etape9_vent.py` | `python3 -m scl.etape9_vent --vent 0 2` | signature §29.4 obtenue (N1 **intact**, N2 **effondrée**) mais **variable** et **aucune naissance** — cause identifiée : voir §5bis |
 
 Visualisation : `python3 viewer.py --log <fichier>.jsonl --port 8400` → http://localhost:8400
 (panneau VU vs PRÉVU en carrés, incertitude, événements d'émergence).
@@ -128,6 +128,32 @@ générique** : c'est la matière de l'auto-réglage futur de l'orchestrateur.
 
 ---
 
+## 5bis. LE GOULOT D'ÉTRANGLEMENT ACTUEL (à traiter en priorité)
+
+Toute la hiérarchie (étapes 6→9) est bâtie sur le **latent compressé OPAQUE** du
+module 1. Or les mesures montrent que c'est le maillon faible :
+
+| représentation | qualité de prédiction mesurée |
+|---|---|
+| latent compressé opaque (64) — **utilisé par la hiérarchie** | **57 %** (chaîne 1→2→1) |
+| latent spatial (non compressant) | 80 % |
+| **représentation OBJET** (slot attention, étape 4) | **94 % reconstruction / 80 % prédiction triviale** |
+
+Conséquence en cascade : si les modules-vitesse prédisent mal, un changement de
+régime ne dégrade que **faiblement** leur erreur → la nouveauté devient
+difficilement détectable (c'est pourquoi le vent ne déclenche pas de naissance),
+et le vocabulaire N2 confond des régimes voisins (v=(1,0) et (2,0)), ce qui
+plafonne N3.
+
+**Action prioritaire pour la suite** : rebâtir la composition sur la
+**représentation objet** (`module_attention.liste_objets`) au lieu du latent
+opaque. Un régime devient alors « comment les objets se déplacent », un vent
+transverse est immédiatement visible (les objets partent en Y), et la prédiction
+redevient triviale (décaler les positions). C'est aussi ce qui lève la dette
+§27.4 (tête 4-classes donnée → catégories émergentes).
+
+---
+
 ## 6. Dettes assumées (codage en dur à retirer)
 
 - `module_attention.py` reconstruit via une **tête 4-classes DONNÉE** (`VALEURS`) :
@@ -144,8 +170,11 @@ générique** : c'est la matière de l'auto-réglage futur de l'orchestrateur.
 
 ## 7. Feuille de route (Architecture §29.6)
 
-1. **Familiarité `F` par niveau** — connu vs inconnu, et *quel* régime : `F = max_m G_m`
-   (gain de prédictibilité), argmax = régime identifié. Quasi gratuit, tout s'appuie dessus.
+0. **PRIORITÉ — rebâtir la hiérarchie sur la représentation OBJET** (§5bis) : c'est
+   le goulot qui plafonne N2, N3, la détection de nouveauté et les horizons.
+1. **Familiarité `F` par niveau** — fait (`DetecteurVitesse.identifier`) : erreur
+   absolue rapportée à l'étalon du module, en écarts-types de sa propre erreur
+   (auto-calibré). À réévaluer une fois la base objet en place.
 2. **Profil de résidus par niveau** — le point de branchement est le niveau le **plus bas**
    anormal ; puis carte de résidu intra-niveau (l'attention sert de loupe).
 3. **N2 → N3** (fait, étape 7) : constance de vitesse, puis **accélération = transition

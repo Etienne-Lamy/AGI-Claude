@@ -57,7 +57,9 @@ class ModuleVitesse:
         self.verrouille = False       # verrouillage asymétrique (§1.4)
         self._ema_rel = None          # résidu RELATIF lissé (compétence vs prior trivial)
         self._ema_abs = None          # erreur ABSOLUE lissée (latent normalisé)
+        self._ema_abs2 = None         # moment d'ordre 2 (→ dispersion de son erreur)
         self.reference = None         # erreur absolue au verrou = étalon de reconnaissance
+        self.reference_ecart = None   # DISPERSION de son erreur au verrou (auto-calibration)
 
     def predire(self, z):
         with torch.no_grad():
@@ -79,12 +81,19 @@ class ModuleVitesse:
             a = CONFIG["ema_residu_composition"]
             self._ema_rel = res_rel if self._ema_rel is None else a * self._ema_rel + (1 - a) * res_rel
         self._ema_abs = e if self._ema_abs is None else a * self._ema_abs + (1 - a) * e
+        self._ema_abs2 = e * e if self._ema_abs2 is None else a * self._ema_abs2 + (1 - a) * e * e
         if (self.n_maj >= CONFIG["maturite_module_vitesse"] and self._ema_rel is not None
                 and self._ema_rel < CONFIG["seuil_maturite_vitesse"]):
             self.verrouille = True
-            self.reference = self._ema_abs       # étalon de RECONNAISSANCE (§29.1)
+            # étalon de RECONNAISSANCE (§29.1) : niveau d'erreur ET dispersion de
+            # cette erreur quand le module était compétent. La dispersion permet un
+            # critère AUTO-CALIBRÉ (« hors de sa plage normale ») au lieu d'un ratio
+            # magique identique pour tous les modules.
+            self.reference = self._ema_abs
+            self.reference_ecart = max((self._ema_abs2 - self._ema_abs ** 2) ** 0.5, 1e-6)
             log(self.id, "verrouillage_module_vitesse", n_maj=self.n_maj,
-                residu_relatif=round(self._ema_rel, 3), reference=round(self._ema_abs, 4))
+                residu_relatif=round(self._ema_rel, 3), reference=round(self.reference, 4),
+                dispersion=round(self.reference_ecart, 4))
         return e
 
     def incertitude(self):
@@ -178,9 +187,14 @@ class DetecteurVitesse:
         mauvais et masque la nouveauté (mesuré : aucune naissance sous vent transverse)."""
         avec_ref = [v for v in residus if self.vitesses[v].reference]
         if avec_ref:
-            ratio = lambda v: residus[v][2] / (self.vitesses[v].reference + 1e-9)
-            vid = min(avec_ref, key=ratio)
-            return vid, ratio(vid) / CONFIG["seuil_ratio_inexplique"]
+            # écart AUTO-CALIBRÉ : de combien d'écarts-types de SA PROPRE erreur le
+            # module sort-il de sa plage normale ? Pas de seuil magique commun : un
+            # module très régulier est jugé sévèrement, un module bruité tolère plus.
+            def sigmas(v):
+                mv = self.vitesses[v]
+                return (residus[v][2] - mv.reference) / mv.reference_ecart
+            vid = min(avec_ref, key=sigmas)
+            return vid, sigmas(vid) / CONFIG["sigmas_inexplique"]
         vid = min(residus, key=lambda v: residus[v][0])
         return vid, residus[vid][0] / self.seuil
 
@@ -204,12 +218,10 @@ class DetecteurVitesse:
             # confondu par l'amplitude du changement — un monde qui défile plus vite
             # rend le prior trivial mauvais et fait paraître TOUT module meilleur
             # (mesuré : la familiarité MONTAIT quand le vent se levait).
-            def _ratio(vid):
-                ref = self.vitesses[vid].reference
-                return residus[vid][2] / (ref + 1e-9) if ref else float("inf")
-            actif = min(residus, key=_ratio)
-            r = _ratio(actif)
-            familiarite = 1.0 / max(1.0, r) if r != float("inf") else 0.0
+            actif, score = self._inexplique(residus)
+            # familiarité ∈ [0,1] : 1 = le module opère dans sa plage normale,
+            # →0 = très au-delà (régime non reconnu). score>1 ⇒ inexpliqué.
+            familiarite = 1.0 / (1.0 + max(0.0, score))
         self.delai.pousser(z)
         return actif, residus, familiarite
 

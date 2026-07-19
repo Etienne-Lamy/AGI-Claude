@@ -125,7 +125,7 @@ CONFIG = dict(
     plafond_residu_composition=5.0,   # borne du résidu relatif (queue lourde → décision instable sans borne)
     ema_residu_composition=0.97,      # lissage du résidu de décision (= surprise "confirmée", §4.5)
     grace_creation_composition=400,   # pas de grâce après une naissance (le nouveau-né apprend d'abord)
-    seuil_ratio_inexplique=2.5,       # erreur / étalon du module au-delà : régime NON expliqué (mesure de reconnaissance, §29.1)
+    sigmas_inexplique=4.0,            # écarts-types de SA PROPRE erreur au-delà desquels un module ne reconnaît plus (auto-calibré, §29.1)
     maturite_module_vitesse=250,      # pas d'entraînement avant de pouvoir verrouiller un module-vitesse
     seuil_maturite_vitesse=0.6,       # résidu relatif lissé sous lequel le module est jugé compétent → VERROUILLÉ (§1.4)
 
