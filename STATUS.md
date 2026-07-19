@@ -33,10 +33,21 @@ essayés (rendu naïf ET spatial-softmax) : plafonnent à ~21 % — vrai problè
 ni trop grand (code gaspillé). `bits_par_dim_mdl` = pression de parcimonie (que le
 RL modulera). Commande : `python3 -m scl.etape3_catalogue --pas 2000`.
 
-**Prochaines étapes** : (a) modules-mémoire sur l'entrée compressée (carte mentale,
-dormance/réactivation) ; (b) latent structuré en objets (slot-attention) pour la
-prédiction triviale ; (c) orchestrateur qui compose les modules + RL du choix.
-203 tests verts.
+**Étape 4 — outil ATTENTION/MASQUAGE (vision → objets). FAIT.**
+`scl/module_attention.py` (Slot Attention, Locatello 2020 : compétition softmax
+SUR LES SLOTS + GRU itératif). Débloque la vision : au lieu d'un latent compressé
+opaque, une décomposition en OBJETS (chaque slot masque un objet). Mesuré
+(`scl/etape4_attention`, 8000 pas) : reconstruction **94 %** ; **liste d'objets
+(x,y,type)** extraite = latent structuré ; **prédiction TRIVIALE du champ suivant
+= décaler les positions de la vitesse, AUCUN réseau → 80 % de rappel**. C'est la
+propriété clé recherchée (position → position+v). Mes tentatives naïves de slots
+plafonnaient à 21 % ; le vrai algorithme atteint 94 %. Viewer : VU vs PRÉVU (la
+prédiction triviale) via `python3 -m scl.etape4_attention --pas 8000 --log etape4.jsonl`.
+
+**Prochaines étapes** : (a) **mémoire de lieu** (carte mentale : modules dormants
+créés sur l'entrée compressée, réactivés au revisit) ; (b) orchestrateur qui
+COMPOSE les modules (attention→objets→prédiction) et apprend par RL quoi créer/
+choisir selon le contexte. 204 tests verts.
 
 ## Mise à jour 2026-07-18 (nuit) — REPRISE ÉTAPE PAR ÉTAPE. ÉTAPE 1 (vision) VALIDÉE
 
