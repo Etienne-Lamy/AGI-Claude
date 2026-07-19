@@ -399,6 +399,104 @@ Le cœur de l'orchestrateur : Set Transformer en entrée, Pointer Network en sor
 
 ---
 
+## 28. Orchestrateur — auto-diagnostic et auto-réglage (à implémenter)
+
+Tous les réglages des étapes 1-6 ont été trouvés par **test & learn manuel**. Cette
+section transforme cette expérience en un **algorithme général** : l'orchestrateur
+n'a pas accès à notre intuition ni à la sémantique du monde ; il ne peut observer
+que des grandeurs **objectives et génériques**. On liste donc (28.2) ce qu'il peut
+mesurer, (28.3) comment un symptôme se traduit en correctif, (28.4) la boucle qui
+s'en sert. Le tout est piloté par un **score de prédictibilité qui doit progresser**.
+
+### 28.1 Le score maître : gain de prédictibilité
+
+Un seul critère gouverne : **prédit-on mieux qu'un prédicteur trivial ?**
+
+    G = 1 − (résidu du module) / (résidu du prior trivial « rien ne change »)
+
+- **Sans unité** (ratio) : comparable entre modules, niveaux et modalités.
+- Évalué sur un **jeu tenu à l'écart** (jamais sur l'échantillon d'entraînement courant).
+- Mesuré **à chaque niveau de la hiérarchie** (latent d'un module aval ET signal
+  régénéré en bout de chaîne) : un gain latent sans gain en bout de chaîne signale
+  un latent qui dérive.
+- **G doit croître.** Plateau ou régression = déclencheur du diagnostic (28.4).
+
+Corollaire de conception : *aucun critère de décision ne doit être une magnitude
+absolue*. Toute magnitude brute est spécifique à une échelle inconnue de
+l'orchestrateur (leçon O3 ci-dessous).
+
+### 28.2 Observables génériques (aucune sémantique du monde)
+
+| # | Observable | Se calcule sur |
+|---|---|---|
+| O1 | Gain de prédictibilité `G` (held-out), par niveau | tout module |
+| O2 | Courbe *performance vs capacité* (balayage du goulot) | famille d'architecture |
+| O3 | Échelle du résidu (médiane) **vs** seuil configuré | critère de décision |
+| O4 | Épaisseur de queue : moyenne / médiane du résidu | critère de décision |
+| O5 | Variance pas-à-pas de la perte / sa moyenne | boucle d'entraînement |
+| O6 | Déséquilibre des classes cible **vs** distribution des sorties | reconstruction |
+| O7 | Taux de création de modules, et distribution des **âges/maturités** | population de modules |
+| O8 | Pureté / entropie des catégories découvertes ; concentration d'usage | classification émergente |
+| O9 | Recouvrement des supports (masques) entre modules parallèles | décomposition en parties |
+| O10 | **Compétence rétrospective** : ré-évaluation d'un module sur son régime historique | spécialisation |
+| O11 | Coût MDL = coût du code + coût du résidu | choix de taille |
+| O12 | Incidents de ressource (timeouts, mémoire) | ordonnancement |
+
+### 28.3 Table symptôme → correctif (issue du test & learn, étapes 1-6)
+
+| Symptôme observable | Interprétation | Correctif générique | Constaté à |
+|---|---|---|---|
+| Perte basse **mais** rappel de la classe minoritaire ≈ 0 (O6) | effondrement sur la classe majoritaire ; la perte scalaire ment | **repondérer** la perte par fréquence inverse ; suivre le rappel par classe, pas la perte | vision (reconstruction tout-noir) |
+| `G` plafonne **et reste plat quand la capacité augmente** (O1+O2) | ce n'est PAS la capacité : le **biais inductif** est inadapté | changer de **famille d'architecture** (ajouter localité/équivariance), pas la taille | MLP bloqué à 44 % quels que soient 48/100/200 |
+| Seuil jamais (ou toujours) franchi ; médiane du résidu hors de la plage du seuil (O3) | critère exprimé en **magnitude absolue** sur une échelle inconnue | **normaliser** l'entrée (stats courantes) **et** exprimer le critère en **ratio au prior trivial** | résidus à 50-60 vs seuil 0.5 |
+| Moyenne ≫ médiane (O4) ; un compteur de pas consécutifs ne déclenche jamais | statistique à **queue lourde** ; décision instable | **borner** (plafond) puis **lisser** (EMA) la statistique **avant** de décider | détection de régime |
+| Taux de création ≈ 1/pas ; tous les modules sont des nouveau-nés (O7) | la règle « créer sur échec » **s'auto-déclenche** | exiger une surprise **confirmée** (évidence accumulée) **+ période de grâce** après naissance | 799 modules en 800 pas |
+| Nombre de modules constant alors que le régime change ; **compétence rétrospective qui se dégrade** (O10) | **oubli** : un module plastique absorbe tout et ne se spécialise en rien | **verrouiller** un module devenu compétent (plancher, jamais plafond) → force la naissance pour un régime nouveau | détection de vitesse (2/3 → 3/3) |
+| Variance pas-à-pas ≫ moyenne (O5) | lot effectif trop petit sur entrées quasi-aléatoires | **mémoire de rejeu + mini-lot** (rester en ligne, gagner en stabilité) | autoencodeur (batch 1 non convergent) |
+| Catégories impures, une catégorie éclatée en plusieurs (O8) | **champ réceptif** plus large que la portée sémantique visée | **restreindre le champ réceptif** au grain de ce qu'on veut catégoriser | catégories émergentes (conv 3×3 sale → 1×1 pure) |
+| Supports des modules parallèles très recouvrants ; pas de partition (O9) | pas de **compétition** entre parties : slots dupliqués/effondrés | introduire une **compétition explicite** (normalisation sur les modules) **+ itération** | slots naïfs 21 % → slot-attention 94 % |
+| `G` croît encore quand on agrandit, mais MDL remonte (O11) | on paye du code pour du gain marginal | choisir la taille au **minimum du MDL**, pas au maximum de `G` | catalogue de goulots (dim 48 retenue) |
+| Timeouts / incidents matériels (O12) | ordonnancement trop gourmand | **sérialiser** l'entraînement (un module à la fois) | watchdog GPU Kepler |
+
+### 28.4 Boucle d'auto-réglage
+
+```
+à chaque palier d'évaluation :
+    G ← gain de prédictibilité (held-out, par niveau)          # 28.1
+    si G progresse :        continuer (ne rien changer)
+    sinon :                                                    # plateau ou régression
+        mesurer les observables O1..O12                        # 28.2
+        symptôme ← appariement au motif le plus net            # 28.3
+        correctif ← action générique associée
+        appliquer, ré-évaluer G sur le même held-out
+        garder si ΔG > 0, sinon ANNULER (retour à l'état précédent)
+    journaliser (contexte, observables, correctif, ΔG)
+```
+
+Deux propriétés importantes :
+
+- **Réversibilité** : tout correctif est annulé s'il n'améliore pas `G`. C'est ce
+  qui rend la recherche sûre sans supervision.
+- **Apprenable** : le journal `(contexte, correctif, ΔG)` est exactement le jeu
+  d'entraînement du choix par renforcement. La table 28.3 n'est qu'un **prior
+  câblé** (l'analogue du précâblage à la naissance) ; l'orchestrateur doit
+  progressivement apprendre *quel correctif dans quel contexte*, et pouvoir en
+  découvrir hors table.
+
+### 28.5 Invariants à respecter par tout nouvel outil
+
+1. Critère de décision **sans unité** (ratio à un prior trivial), jamais une magnitude.
+2. Évaluation sur un **jeu tenu à l'écart**, jamais sur l'échantillon courant.
+3. Statistique de décision **bornée et lissée**.
+4. Toute création : **surprise confirmée + grâce**.
+5. Toute compétence acquise : **verrouillée** (sinon elle sera écrasée).
+6. Ne jamais conclure sur une perte scalaire : suivre la métrique de la **classe rare**.
+7. Avant d'agrandir, faire un **balayage de capacité** : une courbe plate accuse le
+   biais inductif, pas la taille.
+
+
+---
+
 ## 26. Index fonction → section SCL
 
 | Fonction | Fichier | §SCL |
