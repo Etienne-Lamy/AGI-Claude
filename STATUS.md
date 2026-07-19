@@ -75,7 +75,7 @@ Chaque étape a un harnais reproductible. Les chiffres sont mesurés, pas estim�
 | 4 | **Attention/masquage** → objets → **prédiction triviale** | `module_attention.py` | `python3 -m scl.etape4_attention --pas 8000 --log etape4.jsonl` | reconstruction **94 %** ; prédire en **décalant les objets** (aucun réseau) : **80 %** |
 | 5 | **Classification ÉMERGENTE** (aucune étiquette) | `classification_emergente.py` | `python3 -m scl.etape5_classification --pas 4000` | **4 catégories** émergent (sur 6, reste élagué), **100 % pures**, reconstruction **100 %** |
 | 6 | **Composition qui DÉTECTE la vitesse** | `composition.py` | `python3 -m scl.etape6_composition --pas_regime 1500` | 4 modules nés, **3/3 régimes couverts**, les 2 niveaux concordent |
-| 7 | **Hiérarchie N2→N3** : action → changement de régime | `hierarchie.py` | `python3 -m scl.etape7_hierarchie` | voir §5.7 |
+| 7 | **Hiérarchie N2→N3** : action → changement de régime | `hierarchie.py` | `python3 -m scl.etape7_hierarchie` | exactitude **57 %** vs trivial **38 %** → **gain +31 %** ; règle lisible et physiquement correcte sur les régimes bien séparés |
 
 Visualisation : `python3 viewer.py --log <fichier>.jsonl --port 8400` → http://localhost:8400
 (panneau VU vs PRÉVU en carrés, incertitude, événements d'émergence).
@@ -110,6 +110,11 @@ générique** : c'est la matière de l'auto-réglage futur de l'orchestrateur.
    catégories sales ; un encodeur **1×1** (apparence locale) donne des catégories pures.
 10. **Batch-1 en ligne ne converge pas** sur entrées quasi-aléatoires → **mémoire de
     rejeu + mini-lot** (rester en ligne, gagner en stabilité).
+11. **La qualité d'un niveau plafonne le niveau au-dessus** (étape 7) : N3 apprend
+    bien la règle action→régime (+31 %), et ses erreurs se localisent **au niveau du
+    dessous** — le vocabulaire N2 confond v=(1,0) et (2,0) dans un même module et
+    garde un module parasite non associé. Illustration directe de §29.4 : diagnostiquer
+    le niveau le **plus bas** anormal avant de toucher au niveau supérieur.
 
 ---
 

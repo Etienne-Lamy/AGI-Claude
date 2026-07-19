@@ -149,6 +149,36 @@ class DetecteurVitesse:
             n_modules=len(self.vitesses))
         return vid
 
+    def _residus(self, z_prec, z, champ):
+        """Résidus (latent relatif borné, champ) de CHAQUE module sur la transition."""
+        base = float(torch.mean((z_prec - z) ** 2)) + 1e-6
+        out = {}
+        for vid, mv in self.vitesses.items():
+            z_pred = mv.predire(z_prec)
+            res_lat = min(float(torch.mean((z_pred - z) ** 2)) / base,
+                          CONFIG["plafond_residu_composition"])
+            out[vid] = (round(res_lat, 3), round(_residu_champ(self.comp, self._denorm(z_pred), champ), 3))
+        return out
+
+    def identifier(self, champ):
+        """**N2** : quel module explique le mieux la transition courante — SANS
+        apprendre ni créer. C'est le signal de régime (discret, très faible
+        cardinalité) sur lequel se construit le niveau supérieur (§29.2), et la
+        mesure de familiarité connu/inconnu (§29.1).
+        Retourne (id_actif|None, residus, familiarite) où familiarite = 1 − résidu
+        du meilleur (gain vs le prior trivial)."""
+        z_brut = self.comp.encoder(champ).detach()
+        self._maj_stats(z_brut)
+        z = self._norm(z_brut)
+        z_prec = self.delai.sortie
+        actif, residus, familiarite = None, {}, 0.0
+        if z_prec is not None and self.vitesses:
+            residus = self._residus(z_prec, z, champ)
+            actif = min(residus, key=lambda k: residus[k][0])
+            familiarite = 1.0 - residus[actif][0]
+        self.delai.pousser(z)
+        return actif, residus, familiarite
+
     def etape(self, champ, apprendre=True):
         z_brut = self.comp.encoder(champ).detach()                    # z(T) latent (compresseur gelé)
         self._maj_stats(z_brut)
