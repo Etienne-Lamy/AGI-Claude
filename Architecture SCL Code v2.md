@@ -456,6 +456,8 @@ l'orchestrateur (leçon O3 ci-dessous).
 | Catégories impures, une catégorie éclatée en plusieurs (O8) | **champ réceptif** plus large que la portée sémantique visée | **restreindre le champ réceptif** au grain de ce qu'on veut catégoriser | catégories émergentes (conv 3×3 sale → 1×1 pure) |
 | Supports des modules parallèles très recouvrants ; pas de partition (O9) | pas de **compétition** entre parties : slots dupliqués/effondrés | introduire une **compétition explicite** (normalisation sur les modules) **+ itération** | slots naïfs 21 % → slot-attention 94 % |
 | `G` croît encore quand on agrandit, mais MDL remonte (O11) | on paye du code pour du gain marginal | choisir la taille au **minimum du MDL**, pas au maximum de `G` | catalogue de goulots (dim 48 retenue) |
+| Une mesure « relative au prior trivial » VARIE quand l'amplitude du changement varie (un monde qui défile plus vite rend le prior mauvais) | **critère confondu** : tout module paraît meilleur | pour la RECONNAISSANCE, utiliser l'erreur **absolue** (sur latent normalisé) rapportée à l'**étalon du module** ; garder le relatif seulement pour « bat-il le trivial ? » | familiarité qui MONTAIT quand le vent se levait |
+| Un régime « nouveau » n'est pas détecté comme tel | il n'est peut-être **pas nouveau** : vérifier qu'il tombe hors du vocabulaire appris | avant de conclure à un défaut de détection, **vérifier que le stimulus est hors vocabulaire** (ici : vent (1,0) sur vitesse (1,0) ⇒ déplacement (2,0), un régime DÉJÀ connu — le système avait raison) | test du vent, 1er essai |
 | Timeouts / incidents matériels (O12) | ordonnancement trop gourmand | **sérialiser** l'entraînement (un module à la fois) | watchdog GPU Kepler |
 
 ### 28.4 Boucle d'auto-réglage

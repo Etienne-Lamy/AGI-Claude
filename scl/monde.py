@@ -33,6 +33,7 @@ class Monde:
         self.agent_pos = np.array([0, 0], dtype=np.int64)
         self.vitesse = np.array([0, 0], dtype=np.int64)
         self.derniere_accel = np.array([0, 0], dtype=np.int64)
+        self.vent = np.array([0, 0], dtype=np.int64)   # déplacement subi (voir appliquer_action)
         self.historique_vision = [self._frame() for _ in range(self.n_frames)]
         self.compteurs = {"sucre": 0, "baton": 0, "steps": 0}
         log("monde", "creation", graine=self.graine)
@@ -75,13 +76,18 @@ class Monde:
         self.derniere_accel = np.array(accel, dtype=np.int64)
         self.vitesse = np.clip(self.vitesse + self.derniere_accel,
                                -self.v_max, self.v_max)
+        # Le VENT (défaut : nul) est un déplacement subi, qui s'ajoute à la vitesse
+        # propre SANS la modifier : l'agent garde le même état interne mais le monde
+        # défile autrement — c'est un RÉGIME DE DYNAMIQUE nouveau, pas une perception
+        # nouvelle. Sert à tester la localisation d'échec (§29.4).
+        deplacement = self.vitesse + self.vent
         ancienne = self.agent_pos.copy()
-        self.agent_pos = self.agent_pos + self.vitesse
+        self.agent_pos = self.agent_pos + deplacement
         evenements = []
         # collisions sur les cellules traversées (trajectoire discrète simple)
-        n_pas = int(max(abs(self.vitesse[0]), abs(self.vitesse[1]), 1))
+        n_pas = int(max(abs(deplacement[0]), abs(deplacement[1]), 1))
         for i in range(1, n_pas + 1):
-            p = ancienne + (self.vitesse * i) // n_pas
+            p = ancienne + (deplacement * i) // n_pas
             obj = self.objet_en(int(p[0]), int(p[1]))
             if obj:
                 self.consommes.add((int(p[0]), int(p[1])))

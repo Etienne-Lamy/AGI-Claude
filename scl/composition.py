@@ -55,7 +55,9 @@ class ModuleVitesse:
         self.erreurs = deque(maxlen=CONFIG["fenetre_incertitude"])
         self.n_maj = 0
         self.verrouille = False       # verrouillage asymétrique (§1.4)
-        self._ema_rel = None          # résidu relatif lissé (compétence sur SON régime)
+        self._ema_rel = None          # résidu RELATIF lissé (compétence vs prior trivial)
+        self._ema_abs = None          # erreur ABSOLUE lissée (latent normalisé)
+        self.reference = None         # erreur absolue au verrou = étalon de reconnaissance
 
     def predire(self, z):
         with torch.no_grad():
@@ -76,11 +78,13 @@ class ModuleVitesse:
         if res_rel is not None:
             a = CONFIG["ema_residu_composition"]
             self._ema_rel = res_rel if self._ema_rel is None else a * self._ema_rel + (1 - a) * res_rel
+        self._ema_abs = e if self._ema_abs is None else a * self._ema_abs + (1 - a) * e
         if (self.n_maj >= CONFIG["maturite_module_vitesse"] and self._ema_rel is not None
                 and self._ema_rel < CONFIG["seuil_maturite_vitesse"]):
             self.verrouille = True
+            self.reference = self._ema_abs       # étalon de RECONNAISSANCE (§29.1)
             log(self.id, "verrouillage_module_vitesse", n_maj=self.n_maj,
-                residu_relatif=round(self._ema_rel, 3))
+                residu_relatif=round(self._ema_rel, 3), reference=round(self._ema_abs, 4))
         return e
 
     def incertitude(self):
@@ -157,8 +161,28 @@ class DetecteurVitesse:
             z_pred = mv.predire(z_prec)
             res_lat = min(float(torch.mean((z_pred - z) ** 2)) / base,
                           CONFIG["plafond_residu_composition"])
-            out[vid] = (round(res_lat, 3), round(_residu_champ(self.comp, self._denorm(z_pred), champ), 3))
+            res_abs = float(torch.mean((z_pred - z) ** 2))     # erreur ABSOLUE (latent normalisé)
+            out[vid] = (round(res_lat, 3),
+                        round(_residu_champ(self.comp, self._denorm(z_pred), champ), 3),
+                        round(res_abs, 4))
         return out
+
+    def _inexplique(self, residus):
+        """(module le mieux placé, score d'INEXPLICATION ≥ 0 ; > 1 = régime non expliqué).
+
+        UNE SEULE mesure gouverne la reconnaissance ET la décision de créer. Dès que
+        des spécialistes verrouillés existent, on compare l'erreur ABSOLUE à l'ÉTALON
+        du module (son erreur quand il était compétent) : c'est insensible à
+        l'amplitude du changement. Le résidu relatif au prior trivial ne sert que
+        tant qu'aucun étalon n'existe — sinon un monde qui défile vite rend le prior
+        mauvais et masque la nouveauté (mesuré : aucune naissance sous vent transverse)."""
+        avec_ref = [v for v in residus if self.vitesses[v].reference]
+        if avec_ref:
+            ratio = lambda v: residus[v][2] / (self.vitesses[v].reference + 1e-9)
+            vid = min(avec_ref, key=ratio)
+            return vid, ratio(vid) / CONFIG["seuil_ratio_inexplique"]
+        vid = min(residus, key=lambda v: residus[v][0])
+        return vid, residus[vid][0] / self.seuil
 
     def identifier(self, champ):
         """**N2** : quel module explique le mieux la transition courante — SANS
@@ -174,8 +198,18 @@ class DetecteurVitesse:
         actif, residus, familiarite = None, {}, 0.0
         if z_prec is not None and self.vitesses:
             residus = self._residus(z_prec, z, champ)
-            actif = min(residus, key=lambda k: residus[k][0])
-            familiarite = 1.0 - residus[actif][0]
+            # RECONNAISSANCE : erreur ABSOLUE (le latent est déjà normalisé, donc sans
+            # unité) rapportée à l'ÉTALON du module — son erreur quand il a été jugé
+            # compétent. SURTOUT PAS le résidu relatif au prior trivial : celui-ci est
+            # confondu par l'amplitude du changement — un monde qui défile plus vite
+            # rend le prior trivial mauvais et fait paraître TOUT module meilleur
+            # (mesuré : la familiarité MONTAIT quand le vent se levait).
+            def _ratio(vid):
+                ref = self.vitesses[vid].reference
+                return residus[vid][2] / (ref + 1e-9) if ref else float("inf")
+            actif = min(residus, key=_ratio)
+            r = _ratio(actif)
+            familiarite = 1.0 / max(1.0, r) if r != float("inf") else 0.0
         self.delai.pousser(z)
         return actif, residus, familiarite
 
@@ -186,22 +220,11 @@ class DetecteurVitesse:
         z_prec = self.delai.sortie                                    # z(T-1) normalisé
         detecte, residus = None, {}
         if z_prec is not None:
-            # prior trivial « rien ne change » : sert d'ÉCHELLE (critère sans unité)
-            base = float(torch.mean((z_prec - z) ** 2)) + 1e-6
-            for vid, mv in self.vitesses.items():
-                z_pred = mv.predire(z_prec)
-                # (1) latent, RELATIF au prior trivial, BORNÉ : le ratio est à queue
-                # lourde (quelques pas où le champ bouge peu font exploser la valeur) ;
-                # sans borne, la moyenne est ininterprétable et la décision instable.
-                res_lat = min(float(torch.mean((z_pred - z) ** 2)) / base,
-                              CONFIG["plafond_residu_composition"])
-                res_champ = _residu_champ(self.comp, self._denorm(z_pred), champ)  # (2) champ
-                residus[vid] = (round(res_lat, 3), round(res_champ, 3))
+            residus = self._residus(z_prec, z, champ)   # (relatif borné, champ, absolu)
             if not self.vitesses:
                 detecte = self._naissance()          # tout premier régime
             else:
-                detecte = min(residus, key=lambda k: residus[k][0])
-                meilleur = residus[detecte][0]
+                detecte, meilleur = self._inexplique(residus)
                 # décision sur le résidu LISSÉ (EMA) du meilleur module : robuste au
                 # bruit pas-à-pas, et c'est déjà une « surprise confirmée » (§4.5) —
                 # un compteur de pas consécutifs ne déclenchait jamais (queue lourde).
@@ -213,7 +236,7 @@ class DetecteurVitesse:
                     # (oubli) au lieu que chacun se spécialise.
                     self._grace_restante -= 1
                     detecte = self._actif
-                elif self._ema_res > self.seuil:
+                elif self._ema_res > 1.0:            # score normalisé : >1 = inexpliqué
                     detecte = self._naissance()      # régime inexpliqué → émergence
                 else:
                     self._actif = detecte
