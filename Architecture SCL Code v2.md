@@ -468,6 +468,8 @@ sur [8..96] le MDL choisit dim=48).
 | **Prédicteur/transition** | latent/champ P-1 → P ; fiabilité = indicateur de vitesse | `module_ae.py` ✅ (84 %) |
 | **Attention/masquage** | sélectionne une région/un objet du champ → **plusieurs modules spécialisés** → latent STRUCTURÉ (liste d'objets) → prédiction triviale | ❌ à faire *(slot-attention ; clé vision)* |
 | **Mémoire de lieu** | stocke une signature compressée, dormante, **réactivée** au revisit (carte mentale) | ❌ à faire |
+| **Délai (T-1, T-2…)** | recopie l'output d'un module au pas précédent (registre/trace), empilable | `composition.py` ✅ |
+| **Module de transformation** (« vitesse ») | latent(T-1) → latent(T) ; UN module par RÉGIME ; naît quand un régime nouveau n'est plus expliqué ; se VERROUILLE une fois compétent | `composition.py` ✅ (3/3 régimes détectés) |
 | **Discriminateur** D_φ | plausibilité réel/halluciné | `discriminateur.py` ✅ |
 | **Simulateur** S_new | mémoire épisodique générative (rejeu nocturne) | `simulateur.py` ✅ |
 
@@ -486,6 +488,27 @@ sur [8..96] le MDL choisit dim=48).
 - **Évaluer** : MDL, fiabilité, surprise (SPRT), regret de composition.
 - **Méta (RL, plus tard)** : apprendre *quel* outil/dimension/composition choisir
   selon le contexte.
+
+### 27.3bis Enseignements empiriques sur la COMPOSITION (étape 6)
+
+Composer `compresseur → délai → module-transformation → générateur` et évaluer aux
+DEUX niveaux (latent réel du module, puis champ régénéré vs champ réel) fait bien
+ÉMERGER un module par régime, qui détecte la vitesse (3/3 mesuré). Quatre
+conditions se sont révélées NÉCESSAIRES — à garder pour tout futur outil :
+
+1. **Créer sur surprise CONFIRMÉE + délai de grâce.** Sans ça, un module naît à
+   chaque pas (mesuré : 799), le nouveau-né étant lui aussi non entraîné.
+2. **Normaliser le latent** avant de le donner à un module aval : le latent brut
+   d'un compresseur a des magnitudes arbitraires (résidus à 50-60, tout seuil
+   devient absurde).
+3. **Critère de surprise SANS UNITÉ, borné et lissé** : résidu relatif au prior
+   trivial « rien ne change », plafonné (la distribution est à queue lourde) et
+   lissé (EMA) — un compteur de pas consécutifs ne déclenche jamais.
+4. **Verrouillage asymétrique (§1.4) = condition de la spécialisation.** Sans
+   verrou, un module compétent se ré-entraîne sur le régime suivant et OUBLIE le
+   sien : plus de spécialisation, donc plus de détection possible. C'est le verrou
+   qui force la NAISSANCE d'un module pour un régime nouveau. (Confirmation
+   empirique du rôle du verrou : ce n'est pas un raffinement, c'est structurant.)
 
 ### 27.4 Schéma cible pour la vision
 

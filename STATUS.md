@@ -53,6 +53,16 @@ le système découvre les SORTES d'éléments SANS étiquette (codebook ; catég
 sucre) — jamais donnée. DETTE notée (Archi §27.4) : `module_attention` utilise encore une
 tête 4-classes DONNÉE, à remplacer par ces catégories émergentes.
 
+**Étape 6 — COMPOSITION de modules qui DÉTECTE la vitesse. FAIT (3/3).**
+`scl/composition.py` (ModuleDelai, ModuleVitesse, DetecteurVitesse) + `scl/etape6_composition`.
+Chaîne : champ→[compresseur]→z ; z(T-1) via [DÉLAI] → [module VITESSE] → ẑ(T), évalué
+aux DEUX niveaux (latent réel, puis champ régénéré vs vrai champ). Un module par RÉGIME,
+qui NAÎT quand le régime n'est plus expliqué. Mesuré : 4 modules nés, **3/3 vitesses
+couvertes**, les deux niveaux concordent. 4 bugs instructifs corrigés (surprise confirmée
++ grâce ; normalisation du latent ; résidu relatif borné+lissé ; et surtout le
+**VERROUILLAGE ASYMÉTRIQUE §1.4** sans lequel un module oublie son régime → aucune
+spécialisation). Détail : Architecture §27.3bis.
+
 **Prochaines étapes** : (a) **mémoire de lieu** (carte mentale : modules dormants
 créés sur l'entrée compressée, réactivés au revisit) ; (b) orchestrateur qui
 COMPOSE les modules (attention→objets→prédiction) et apprend par RL quoi créer/
