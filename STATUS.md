@@ -44,6 +44,15 @@ propriété clé recherchée (position → position+v). Mes tentatives naïves d
 plafonnaient à 21 % ; le vrai algorithme atteint 94 %. Viewer : VU vs PRÉVU (la
 prédiction triviale) via `python3 -m scl.etape4_attention --pas 8000 --log etape4.jsonl`.
 
+**Étape 5 — CLASSIFICATION ÉMERGENTE des éléments. FAIT.** `scl/classification_emergente.py`
+(VQ, encodeur per-cell). Réponse à « les catégories ne doivent pas être codées en dur » :
+le système découvre les SORTES d'éléments SANS étiquette (codebook ; catégories utilisées
+émergent, inutiles élaguées = parcimonie). Chaque catégorie = module identifie+régénère
+(« un sucre »). Mesuré (`scl/etape5_classification`, 4000 pas) : **4 catégories émergentes**
+(sur 6), **reconstruction 100 %**, chacune **100 % pure** a posteriori (vide/corps/bâton/
+sucre) — jamais donnée. DETTE notée (Archi §27.4) : `module_attention` utilise encore une
+tête 4-classes DONNÉE, à remplacer par ces catégories émergentes.
+
 **Prochaines étapes** : (a) **mémoire de lieu** (carte mentale : modules dormants
 créés sur l'entrée compressée, réactivés au revisit) ; (b) orchestrateur qui
 COMPOSE les modules (attention→objets→prédiction) et apprend par RL quoi créer/
