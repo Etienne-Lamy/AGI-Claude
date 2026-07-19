@@ -497,6 +497,126 @@ Deux propriétés importantes :
 
 ---
 
+## 29. Hiérarchie, horizons, localisation d'échec, mémoire (conception)
+
+Suite de §28. Cinq capacités qui découlent d'un **même principe récursif** : *la
+sortie d'un module est un signal comme un autre*, auquel on réapplique le même
+catalogue d'outils (compresser / prédire / classifier). Rien ici n'est spécifique
+au monde jouet.
+
+### 29.1 Connu vs inconnu — l'identification de régime est gratuite
+
+Chaque module compétent (verrouillé) est **sa propre étiquette de régime**. Il
+suffit de mesurer, sur la fenêtre courante, le gain de prédictibilité de chacun :
+
+    familiarité F = max_m G_m        régime identifié = argmax_m G_m
+
+- `F` élevé → **environnement connu**, et l'argmax dit *lequel*.
+- `F ≈ 0` (aucun module ne bat le prior trivial) → **environnement inconnu** →
+  après confirmation (§28 invariant 4) → création.
+- **Hystérésis** obligatoire sur l'argmax, sinon papillonnement entre régimes proches.
+- Mesurer `F` **par niveau** : on peut très bien connaître la perception (N1) et
+  découvrir une dynamique inédite (N2). C'est le cas « vent » : N1 intact, N2 s'effondre.
+
+### 29.2 Récursion : la sortie d'un module devient l'entrée à réduire
+
+Cascade attendue, chaque niveau réduisant encore l'entrée :
+
+| niveau | signal | cardinalité |
+|---|---|---|
+| N0 | champ visuel | 100 valeurs |
+| N1 | latent compressé (module 1) | 64 |
+| N2 | **identité du module de transition actif** = régime | ≈ 1 symbole |
+| N3 | transitions de N2 **conditionnées par l'action** | règle |
+| N4 | invariants sur N3 (ex. « l'effet d'une action est stable ») | … |
+
+Le passage clé est **N2** : une fois qu'un module-vitesse par régime existe, « quel
+module explique » est un signal **discret et de très faible cardinalité**. Dessus :
+
+- vitesse **constante** = « le module actif ne change pas » (prédiction triviale à
+  apprendre — donc `G` immédiatement élevé) ;
+- **accélération** = transition de N2 **conditionnée par l'action** :
+  `(T-1 : V1) + action A → (T : V2), V2 ≠ V1`.
+  L'accélération n'est donc pas un capteur ni un calcul câblé : c'est un **modèle de
+  transition sur l'espace des modules-vitesse**, appris avec les mêmes outils.
+
+Signe qu'une abstraction est bonne : **les modules deviennent plus petits et plus
+rapides en montant**. Si un niveau supérieur coûte plus cher que celui du dessous,
+l'abstraction est ratée (observable de §28).
+
+### 29.3 Horizons T+2, T+3… et branches d'action
+
+Deux voies, à départager par MDL :
+1. **itérer** le module T+1 (réinjecter sa prédiction) — gratuit, mais l'erreur se compose ;
+2. **un module dédié par horizon** (familles d'horizon, §12) — plus coûteux, plus stable.
+
+**Critère d'arrêt objectif** : étendre l'horizon tant que `G(h) > 0` sur held-out.
+La courbe `G(h)` donne l'**horizon naturel** du système — là où elle s'annule, il
+n'y a plus rien à gagner, inutile d'empiler.
+
+**Branches** : conditionner la chaîne par chaque action candidate produit un
+éventail de futurs imaginés. La machinerie est identique à la prédiction ; la
+seule chose qui manque aujourd'hui est la **valeur** pour les prioriser (aucune
+expérience alimentaire encore). Priorisation = étape ultérieure, pas mécanisme
+séparé.
+
+### 29.4 Localiser où ça rate quand le contexte change
+
+Le résidu normalisé est mesurable **à chaque niveau**. Un échec bas contamine tout
+ce qui est au-dessus, donc :
+
+> **le point de branchement est le niveau le PLUS BAS dont le résidu est anormal.**
+
+Signature diagnostique (profil de résidus par niveau) :
+
+| profil | interprétation | où créer |
+|---|---|---|
+| N1 anormal | perception inédite (élément jamais vu) | catégorie / compression |
+| N1 ok, N2 anormal | **dynamique** nouvelle (ex. vent) | module de transition |
+| N1-N2 ok, N3 anormal | la règle **action → effet** a changé | niveau action |
+
+Puis, *à l'intérieur* du niveau fautif, la **carte de résidu** (par cellule, objet
+ou masque d'attention) localise **où** — l'attention sert de loupe pour isoler
+l'objet réellement nouveau. C'est la généralisation hiérarchique de §4.6.
+
+### 29.5 Mémoire épisodique — ne retenir que le non-régénérable
+
+Principe directeur (parcimonie, §5) :
+
+> **Ce que les modules savent prédire est déjà « stocké » dans les modules.
+> La mémoire ne doit contenir que le RÉSIDU.**
+
+- **Quoi retenir** : uniquement les épisodes **surprenants** (`G` effondré). Le
+  reste est reproductible à volonté par la chaîne — le mémoriser serait payer deux fois.
+- **Graine de régénération** (contenu minimal d'un épisode) :
+  1. le latent compressé initial `z` (module 1) — l'état de départ ;
+  2. la **séquence d'actions** ;
+  3. l'**identité des modules actifs** (le régime) — quelques symboles ;
+  4. le **résidu** : la seule part que la chaîne n'a pas su prédire.
+- **Rejeu nocturne** : (1)+(2)+(3) reconstituent la partie prédictible via la
+  chaîne ; (4) restaure l'imprévu. On retravaille alors au calme, **attention
+  restreinte** à ce qui était nouveau.
+- **Critère de suffisance, mesurable** : une mémoire est suffisante si son rejeu
+  **reproduit l'épisode dans la tolérance qui compte**. Sinon, monter d'un cran
+  vers le brut (latent → latent+masques → champ) — arbitrage par MDL entre les
+  variantes de stockage.
+- **Carte mentale / lieux** : un lieu = une **signature compressée récurrente**.
+  Le module créé dessus peut dormir ; le revoir = un module dormant qui retrouve
+  soudain un `G` élevé → **reconnaissance**. C'est la même mesure qu'en 29.1.
+
+### 29.6 Ordre d'implémentation suggéré
+
+1. `F` par niveau (29.1) — connu/inconnu + identification : quasi gratuit, tout
+   le reste s'appuie dessus.
+2. Profil de résidus par niveau (29.4) — dit *où* créer, supprime les créations aveugles.
+3. Niveau N2 → N3 (29.2) : constance de vitesse, puis accélération conditionnée
+   par l'action. C'est la prochaine **émergence démontrable**.
+4. Courbe `G(h)` et horizons (29.3).
+5. Mémoire épisodique par résidu (29.5), qui alimente le cycle nocturne.
+
+
+---
+
 ## 26. Index fonction → section SCL
 
 | Fonction | Fichier | §SCL |
