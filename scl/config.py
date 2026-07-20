@@ -132,6 +132,16 @@ CONFIG = dict(
     fenetre_progres_regime=60,        # fenêtre pour juger si le meilleur module progresse encore (§28.1)
     epsilon_progres_regime=0.01,      # gain de rappel minimal pour être dit « en progrès »
     grace_regime=2000,                # pas de grâce d'un module-régime conv (lent : ~2000 pas pour être compétent)
+
+    # --- orchestrateur Mode A (orchestrateur.py, §31.5) ---
+    lambda_cout_programme=0.15,       # pression de parcimonie sur la LONGUEUR/coût d'un programme (valeur = G − λ·coût)
+
+    # --- mémoire épisodique (memoire_episodique.py, §29.5, §31.7-8) ---
+    capacite_memoire_episodique=20,   # nb max d'épisodes surprenants retenus
+    seuil_familiarite_surprise=0.35,  # familiarité en dessous : SURPRISE → on enregistre l'épisode
+    duree_min_episode=5,              # pas minimum pour qu'un épisode vaille d'être scellé
+    seuil_rappel_compris=0.5,         # rappel du rejeu au-dessus : épisode COMPRIS (§31.8)
+    passes_nuit=40,                   # passes d'entraînement d'un module sur un épisode rejoué la nuit
     maturite_module_vitesse=250,      # pas d'entraînement avant de pouvoir verrouiller un module-vitesse
     seuil_maturite_vitesse=0.6,       # résidu relatif lissé sous lequel le module est jugé compétent → VERROUILLÉ (§1.4)
 
