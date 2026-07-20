@@ -139,7 +139,8 @@ CONFIG = dict(
     # --- mémoire épisodique (memoire_episodique.py, §29.5, §31.7-8) ---
     capacite_memoire_episodique=20,   # nb max d'épisodes surprenants retenus
     seuil_familiarite_surprise=0.35,  # familiarité en dessous : SURPRISE → on enregistre l'épisode
-    duree_min_episode=5,              # pas minimum pour qu'un épisode vaille d'être scellé
+    hysteresis_surprise=0.25,         # on ne sort de surprise qu'au-dessus de (seuil_bas + hystérésis) — évite la fragmentation
+    duree_min_episode=8,              # pas minimum pour qu'un épisode vaille d'être scellé (surapprend si trop court)
     seuil_rappel_compris=0.5,         # rappel du rejeu au-dessus : épisode COMPRIS (§31.8)
     passes_nuit=40,                   # passes d'entraînement d'un module sur un épisode rejoué la nuit
     maturite_module_vitesse=250,      # pas d'entraînement avant de pouvoir verrouiller un module-vitesse

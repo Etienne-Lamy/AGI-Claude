@@ -16,13 +16,13 @@ def test_enregistreur_scelle_a_la_fin_de_surprise():
     enr = Enregistreur(seuil_surprise=0.35)
     # pas surpris → rien
     assert enr.observer(_champ(), (0, 0), "r0", familiarite=0.9) is None
-    # surprise prolongée → accumulation, rien scellé
-    for _ in range(6):
+    # surprise prolongée → accumulation, rien scellé (≥ duree_min_episode)
+    for _ in range(10):
         assert enr.observer(_champ(), (1, 0), None, familiarite=0.1) is None
-    # retour à familier → l'épisode se scelle
+    # retour AU FAMILIER (au-dessus du seuil haut, hystérésis) → l'épisode se scelle
     ep = enr.observer(_champ(), (0, 0), "r0", familiarite=0.9)
     assert ep is not None
-    assert len(ep.champs) == 6 and ep.familiarite_min <= 0.1
+    assert len(ep.champs) == 10 and ep.familiarite_min <= 0.1
 
 
 def test_memoire_purge_les_compris_en_priorite():

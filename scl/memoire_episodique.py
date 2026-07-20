@@ -62,13 +62,21 @@ class Enregistreur:
     familiarité reste basse, on accumule ; à la sortie de surprise, on scelle."""
 
     def __init__(self, seuil_surprise=None):
-        self.seuil = seuil_surprise if seuil_surprise is not None else CONFIG["seuil_familiarite_surprise"]
+        # HYSTÉRÉSIS (§29.1, obligatoire) : on ENTRE en surprise sous `seuil_bas`,
+        # on n'en SORT qu'au-dessus de `seuil_haut`. Sans ça, la familiarité bruitée
+        # franchit le seuil dans les deux sens et FRAGMENTE un imprévu continu en
+        # dizaines de mini-épisodes (mesuré : 1 vent → ~20 épisodes).
+        self.seuil_bas = seuil_surprise if seuil_surprise is not None else CONFIG["seuil_familiarite_surprise"]
+        self.seuil_haut = self.seuil_bas + CONFIG["hysteresis_surprise"]
         self._en_cours = None
 
     def observer(self, champ, action, module_actif, familiarite):
         """À appeler à chaque pas. Retourne un Episode SCELLÉ si la surprise vient de
         se terminer, sinon None."""
-        surpris = familiarite < self.seuil
+        if self._en_cours is None:
+            surpris = familiarite < self.seuil_bas          # entrée en surprise
+        else:
+            surpris = familiarite < self.seuil_haut         # on reste tant qu'on n'est pas revenu au familier
         if surpris:
             if self._en_cours is None:
                 self._en_cours = Episode(
