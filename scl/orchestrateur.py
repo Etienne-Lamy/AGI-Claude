@@ -127,15 +127,48 @@ def _rappel(champ_pred, champ_vrai):
     return int((((p - v).abs() < 0.2) & obj).sum()) / n
 
 
-def evaluer_programme(prog, paires_eval):
-    """Rappel moyen de prédiction, et G vs le prior trivial « champ inchangé »."""
+def evaluer_programme(prog, paires_eval, cible="prediction"):
+    """G du programme pour un OBJECTIF donné (§31.4 : le besoin sélectionne la cible) :
+    - "prediction"     : la sortie doit égaler le champ SUIVANT b (prior : b ≈ a) ;
+    - "reconstruction" : la sortie doit égaler le champ COURANT a (prior : champ vide).
+    Retourne (rappel, rappel_trivial, G)."""
     r, rt = [], []
     for a, b in paires_eval:
-        r.append(_rappel(prog.predire(a), b))
-        rt.append(_rappel(a, b))                     # prior : prédire a pour b
+        sortie = prog.predire(a)
+        if cible == "reconstruction":
+            r.append(_rappel(sortie, a))
+            rt.append(_rappel(np.zeros_like(a), a))    # prior : champ vide
+        else:
+            r.append(_rappel(sortie, b))
+            rt.append(_rappel(a, b))                    # prior : rien ne change
     rm, rtm = float(np.mean(r)), float(np.mean(rt))
     g = (rm - rtm) / (1.0 - rtm) if rtm < 1.0 else 0.0
     return rm, rtm, g
+
+
+def mode_A_multi(flux_train, paires_eval, objectifs=("prediction", "reconstruction"),
+                 profondeur_max=3, pas=1500, lam=None):
+    """Entraîne CHAQUE programme UNE fois, puis le classe pour PLUSIEURS objectifs
+    (la cible change, pas les modules). Retourne {objectif: classement}."""
+    lam = lam if lam is not None else CONFIG["lambda_cout_programme"]
+    progs = []
+    for chaine in enumerer_programmes(profondeur_max):
+        prog = Programme(chaine)
+        for champ_prec, champ in flux_train(pas):
+            if champ_prec is not None:
+                prog.entrainer(champ_prec, champ)
+        progs.append(prog)
+    classements = {}
+    for obj in objectifs:
+        res = []
+        for prog in progs:
+            _, _, g = evaluer_programme(prog, paires_eval, cible=obj)
+            valeur = g - lam * prog.cout() / 100.0
+            res.append({"chaine": prog.chaine, "G": round(g, 3), "cout": prog.cout(),
+                        "valeur": round(valeur, 3)})
+        res.sort(key=lambda r: -r["valeur"])
+        classements[obj] = res
+    return classements
 
 
 def mode_A(flux_train, paires_eval, profondeur_max=3, pas=1500, lam=None):
