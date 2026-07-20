@@ -705,6 +705,171 @@ et c'est ce qui pousse naturellement à consolider les macros utiles.
 
 ---
 
+## 31. CAHIER DES CHARGES DE L'ORCHESTRATEUR — design algorithmique complet
+
+Synthèse de §27-§30 et des 13 enseignements empiriques (STATUS §5). Objectif : que
+l'orchestrateur fasse SEUL le travail fait à la main dans les étapes 1-9.
+
+### 31.1 Rôle et invariants
+
+L'orchestrateur **émet des programmes** qui composent des modules ; il ne calcule
+jamais lui-même (§10.2, §30). Invariants imposés à toute version :
+
+1. Toute instruction est **typée** ; une composition mal typée est **impossible à
+   émettre** (masque dur, pas pénalité) — c'est le principal réducteur d'espace.
+2. Toute cible de prédiction est **ancrée** sur du vérifiable : réel brut, ou module
+   déjà certifié (§7.4). *Jamais* la sortie d'un module non ancré (sinon un module
+   constant devient « parfaitement prédit » — analogue de l'effondrement à zéro mesuré).
+3. Tout critère est **sans unité** et **auto-calibré** (§28.5).
+4. Création : **surprise confirmée + grâce** ; compétence acquise : **verrouillée**.
+5. **Activation creuse** : peu de modules actifs ; budget d'attention borné (§13).
+6. Valeur d'un programme = **ΔG − λ·coût** (§30.5).
+
+### 31.2 État observé `T_t` (entrée de l'orchestrateur)
+
+| bloc | contenu |
+|---|---|
+| capteurs | entrées physiques disponibles |
+| modules | id, type, statut (actif/verrouillé/**dormant**/en test), `G`, incertitude, condensateur, maturité (`n_maj`), étalon + dispersion |
+| registres | sorties retardées T-1, T-2… (`ModuleDelai`) |
+| diagnostic | **profil de résidus par niveau** (§29.4), familiarité par niveau (§29.1) |
+| besoins | faim, ennui, douleur (et le **besoin dominant**, argmax + hystérésis) |
+| budget | capacité d'attention restante, coût déjà engagé |
+
+### 31.3 Le LANGAGE (vocabulaire + grammaire)
+
+**Un module = un mot** (idée retenue : le vocabulaire est ouvert et grandit). Mais
+le vocabulaire doit être plus riche qu'« existants + à créer + entrées » :
+
+| classe de token | exemples |
+|---|---|
+| SIGNAL | capteur physique, sortie d'un module, registre retardé `T-1`, `T-2` |
+| OPÉRATEUR | `compresser`, `prédire_transition`, `masquer/attention`, `classifier`, `retarder`, `identité` |
+| CRÉATION | `[NEW type=… dim=… entrée=…]` — **paramétrée** : créer EST une instruction |
+| CONTRÔLE | `ANCRE(cible)`, `BRANCHE(action)`, `EOF` |
+
+**Instruction = TRIPLET `(source, opérateur, cible)`**, pas un doublet. Raison : avec
+un doublet, l'opération reste implicite et le modèle doit la deviner — or nous avons
+maintenant plusieurs opérateurs bien distincts. Le triplet est déjà la forme de §10.2.
+
+**Programme** = suite d'instructions terminée par `EOF` (longueur variable, pénalisée
+par le coût). **Fenêtre d'attention** : 10-20 éléments de `T_t` (pas la longueur du
+programme, qui est bornée séparément).
+
+### 31.4 L'OBJECTIF — pourquoi il faut le dédoubler
+
+Proposition initiale : « maximiser la prévision d'un mélange réel/sorties de modules
+en réduisant faim, ennui, douleur ». À amender sur deux points, tirés des mesures :
+
+- **Ne pas additionner épistémique et homéostatique.** `G` (gain de prédiction) est
+  **dense** (mesurable à chaque pas) ; faim/douleur sont **rares et différées**. Les
+  sommer rend l'attribution de crédit impossible, et cela viole §15.3 (jamais un
+  mélange pondéré continu des besoins). **Solution** : le besoin dominant **SÉLECTIONNE
+  la cible** (que faut-il prédire/obtenir maintenant), et `G` **mesure la réussite**.
+  Les besoins pilotent le *quoi*, `G` note le *comment*.
+- **Récompense d'émission** : `R = ΔG(cible ancrée) − λ·coût(programme)`. Dense,
+  sans unité, directement optimisable.
+
+### 31.5 MODE A — « dirigé » (A\*), sans apprentissage
+
+Généralise `orchestrateur_naif.essayer_catalogue` (qui est un A\* de profondeur 1).
+
+- **Nœud** : programme partiel (chaîne ancrée → cible).
+- **Arête** : ajouter une instruction typée, y compris `[NEW type/dim/entrée]`.
+- **g(n)** : coût MDL cumulé = bits du code + coût d'activation.
+- **h(n)** : résidu restant estimé sur la cible ancrée (optimiste ; remplaçable plus
+  tard par la valeur apprise `V_ψ`, §7).
+- **But** : résidu sous la tolérance de la cible ancrée.
+- **Élagage** : typage (dur), budget d'attention, et **tabou** des sous-programmes déjà
+  évalués sans gain (journalisés).
+
+Ce mode est le **professeur** : lent mais fiable, il produit des programmes corrects.
+
+### 31.6 MODE B — « appris » (LLM + attention)
+
+- **Entrée** : `T_t` (fenêtre 10-20) → encodeur à attention (Set Transformer).
+- **Sortie** : triplet suivant, par **pointeurs** (Pointer Network) sur les éléments
+  présents + têtes pour l'opérateur et les paramètres de `[NEW]`, jusqu'à `EOF`.
+- **Masque de type appliqué aux logits** : seules les continuations valides sont
+  émettables.
+- **Entraînement en deux temps** :
+  1. **Imitation** des programmes réussis du mode A (démarrage à froid, cf. précâblage) ;
+  2. **REINFORCE** sur `R = ΔG − λ·coût`, baseline = regret de composition (§10.8).
+- **Bascule A → B** mesurée : on passe la main à B quand, sur un échantillon tenu à
+  l'écart, `R(B) ≥ R(A)` de façon stable ; sinon B propose et A **vérifie** (garde-fou).
+
+### 31.7 MODE TEMPS RÉEL (jour) — l'imprévu
+
+À chaque pas, si le gain se dégrade :
+
+```
+1. profil ← résidu normalisé par niveau                       (§29.4)
+2. niveau_fautif ← le PLUS BAS niveau anormal                 (un échec bas contamine le haut)
+3. zone ← carte de résidu intra-niveau (attention = loupe)    (quel objet/région)
+4. si surprise CONFIRMÉE et hors grâce :
+     a) NAÎTRE un prédicteur au niveau_fautif, sur la zone     (le plus bas où ça dérive)
+     b) NAÎTRE un ENREGISTREUR : il apprend à REPRODUIRE l'entrée imprévue
+        (graine = latent initial + actions + modules actifs + résidu, §29.5)
+5. budget serré : programme le plus court possible, activation creuse
+```
+
+L'enregistreur est le point clé demandé : sans lui, l'épisode imprévu est perdu et la
+nuit n'a rien à retravailler. Sa cible est **mesurable** : son rejeu doit reproduire
+l'épisode dans la tolérance qui compte.
+
+### 31.8 MODE NUIT — comprendre
+
+```
+pour chaque épisode surprenant mémorisé :
+    régénérer l'épisode depuis la graine (enregistreur + chaîne)
+    RE-ESSAYER :
+        - d'autres ACTIONS (branches, §29.3)
+        - d'autres COMPOSITIONS (mode A, budget large, sans contrainte temps réel)
+        - d'autres DIMENSIONS/points d'entrée pour les modules nés le jour
+    garder ce qui améliore G (sinon annuler — réversibilité §28.4)
+consolider : toute composition fréquente → un module unique (macro, §9 n→1)
+élaguer : modules sans usage ni gain → dormants, puis atrophie
+```
+
+**Critère de « compris » (mesurable)** : l'épisode est **régénérable** depuis sa graine
+**et** désormais **prédit** (`G > 0` sur le rejeu). Tant que l'un des deux manque, il
+reste au programme de la nuit suivante.
+
+### 31.9 Boucle d'auto-réglage
+
+Celle de §28.4, appliquée à l'orchestrateur lui-même : si `G` plateau → mesurer les
+observables O1-O12 → apparier un symptôme (§28.3) → appliquer le correctif → **annuler
+si ΔG ≤ 0** → journaliser `(contexte, correctif, ΔG)`, qui est le jeu d'entraînement du
+choix par RL.
+
+### 31.10 Instrumentation obligatoire (visualisation)
+
+Tout ce qui suit doit être exposé au dashboard, sinon le comportement est indébogable :
+
+- par module : `G`, incertitude, **condensateur**, maturité (`n_maj`), statut
+  (actif/verrouillé/dormant), étalon + dispersion, coût ;
+- par niveau : profil de résidus, familiarité, carte de résidu (loupe) ;
+- global : `G(h)` (courbe d'horizon), MDL total, budget d'attention consommé,
+  besoins (faim/ennui/douleur) et besoin dominant ;
+- **le PROGRAMME émis** (suite de triplets) — c'est la sortie la plus informative ;
+- événements : naissance, verrouillage, mise en dormance, réveil, consolidation, atrophie ;
+- journal d'auto-réglage `(symptôme, correctif, ΔG)`.
+
+### 31.11 Ordre d'implémentation et critères d'acceptation
+
+| # | Brique | Critère d'acceptation |
+|---|---|---|
+| 1 | Base **objet** sous la hiérarchie (STATUS §5bis) | prédiction de régime ≫ 57 % ; vent transverse détecté |
+| 2 | `T_t` + typage + instrumentation | tout §31.10 visible au dashboard |
+| 3 | **Mode A** (A\* typé, MDL) | retrouve seul les choix faits à la main (étapes 1-7) |
+| 4 | Temps réel + **enregistreur** | un épisode imprévu est régénérable |
+| 5 | **Nuit** (rejeu, re-essais, consolidation) | critère « compris » atteint sur ≥ 1 épisode |
+| 6 | **Mode B** (imitation puis REINFORCE) | `R(B) ≥ R(A)` sur held-out |
+| 7 | Auto-réglage §28.4 branché | un correctif appliqué seul améliore `G` |
+
+
+---
+
 ## 26. Index fonction → section SCL
 
 | Fonction | Fichier | §SCL |
