@@ -126,6 +126,12 @@ CONFIG = dict(
     ema_residu_composition=0.97,      # lissage du résidu de décision (= surprise "confirmée", §4.5)
     grace_creation_composition=400,   # pas de grâce après une naissance (le nouveau-né apprend d'abord)
     sigmas_inexplique=4.0,            # écarts-types de SA PROPRE erreur au-delà desquels un module ne reconnaît plus (auto-calibré, §29.1)
+    # détection de régime en ESPACE-CHAMP (regime.py) — résidu = rappel objets ∈ [0,1]
+    seuil_rappel_inexplique=0.45,     # rappel du meilleur module en dessous : régime inexpliqué → naissance
+    seuil_rappel_maitrise=0.5,        # rappel lissé au-dessus : module compétent → VERROUILLÉ (§1.4)
+    fenetre_progres_regime=60,        # fenêtre pour juger si le meilleur module progresse encore (§28.1)
+    epsilon_progres_regime=0.01,      # gain de rappel minimal pour être dit « en progrès »
+    grace_regime=2000,                # pas de grâce d'un module-régime conv (lent : ~2000 pas pour être compétent)
     maturite_module_vitesse=250,      # pas d'entraînement avant de pouvoir verrouiller un module-vitesse
     seuil_maturite_vitesse=0.6,       # résidu relatif lissé sous lequel le module est jugé compétent → VERROUILLÉ (§1.4)
 
