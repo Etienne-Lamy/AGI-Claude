@@ -84,6 +84,29 @@ class ModeB(torch.nn.Module):
                 break
         return chaine
 
+    def echantillonner(self, objectif, max_len=4):
+        """Émet un programme en ÉCHANTILLONNANT (exploration), sous masque de type.
+        Retourne (chaine, log_prob) où log_prob est un tenseur DIFFÉRENTIABLE = somme
+        des log π des tokens choisis (EOF compris) — la quantité que REINFORCE remonte."""
+        h = self.emb_obj(torch.tensor([objectif], device=DEVICE)).squeeze(0)
+        tok = torch.tensor(BOS, device=DEVICE)
+        chaine = []
+        log_prob = torch.zeros((), device=DEVICE)
+        entropie = torch.zeros((), device=DEVICE)
+        for _ in range(max_len):
+            h = self.gru(self.emb_tok(tok).unsqueeze(0), h.unsqueeze(0)).squeeze(0)
+            logits = self._logits(h)
+            masque = _masque_type(chaine).to(DEVICE)
+            logits = logits.masked_fill(~masque, float("-inf"))
+            dist = torch.distributions.Categorical(logits=logits)
+            tok = dist.sample()
+            log_prob = log_prob + dist.log_prob(tok)
+            entropie = entropie + dist.entropy()      # garde l'exploration vivante
+            if VOCAB[tok] == "EOF":
+                break
+            chaine.append(VOCAB[tok])
+        return chaine, log_prob, entropie
+
     def perte_imitation(self, objectif, cible_chaine):
         """Entropie croisée (teacher forcing) pour reproduire `cible_chaine`."""
         h = self.emb_obj(torch.tensor([objectif], device=DEVICE)).squeeze(0)
@@ -114,3 +137,34 @@ def entrainer_par_imitation(mode_b, exemples, pas=400, lr=5e-3):
             perte.backward()
             opt.step()
     log("mode_b", "imitation_terminee", n_exemples=len(exemples), pas=pas)
+
+
+def entrainer_par_renforcement(mode_b, recompense, objectifs, pas=400, lr=3e-3,
+                               beta_baseline=0.1, beta_entropie=0.05):
+    """REINFORCE (§31.6, après l'imitation ou À LA PLACE) : Mode B ÉCHANTILLONNE un
+    programme, on le mesure par la récompense R = G − λ·coût (`recompense(obj, chaine)`),
+    et on remonte ∇ log π · (R − baseline). Aucun professeur : l'orchestrateur DÉCOUVRE
+    le meilleur programme par la seule récompense (Principe 2 : appris par renforcement
+    selon le contexte). La baseline (moyenne mobile de R par objectif) réduit la variance.
+
+    Régularisation par ENTROPIE avec RECUIT (`beta_entropie`, décru linéairement) : sans
+    elle, la politique partagée s'effondre tôt sur le programme le plus facile à
+    échantillonner (le plus court) et n'explore plus les programmes plus longs mais
+    meilleurs pour d'autres objectifs — l'avantage positif n'arrive alors jamais. On
+    maintient l'exploration au début, puis on laisse exploiter en fin.
+
+    `objectifs` : itérable d'indices d'objectif (0..n-1). `recompense(obj, chaine)→float`."""
+    objectifs = list(objectifs)
+    opt = torch.optim.Adam(mode_b.parameters(), lr=lr)
+    base = {o: 0.0 for o in objectifs}
+    for t in range(pas):
+        beta_ent = beta_entropie * (1 - t / pas)      # recuit : exploration → exploitation
+        for obj in objectifs:
+            chaine, log_prob, entropie = mode_b.echantillonner(obj)
+            r = float(recompense(obj, chaine))
+            avantage = r - base[obj]
+            base[obj] = (1 - beta_baseline) * base[obj] + beta_baseline * r
+            opt.zero_grad()
+            (-avantage * log_prob - beta_ent * entropie).backward()
+            opt.step()
+    log("mode_b", "renforcement_termine", n_objectifs=len(objectifs), pas=pas)
