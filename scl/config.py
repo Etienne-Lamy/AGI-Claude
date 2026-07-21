@@ -218,6 +218,7 @@ CONFIG = dict(
     recompense_sucre=0.4,          # baisse de faim en mangeant
     ennui_par_step=0.001,          # f croissante ; plafond dur 0.5 appliqué dans le code
     delta_hysteresis_besoin=0.05,  # δ du Schmitt-trigger argmax du besoin dominant, §15.3
+    penalite_temps=0.01,           # r_temps<0 par pas (anti-tergiversation, dominé par tout gain réel)
 
     # --- douleur : signal câblé (pas un besoin de b_t), garde-fou §15.3 ---
     douleur_baton=0.5,
