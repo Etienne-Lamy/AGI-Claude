@@ -56,7 +56,7 @@ GPU : GTX Titan Black (Kepler, sm_35), torch 1.12 compilé maison. **Watchdog** 
 pas empiler plusieurs entraînements GPU simultanés (« launch timed out ») — entraîner
 **un module à la fois**. Le GPU récupère seul après un timeout.
 
-Tests : `python3 -m pytest tests/ -q` → **223 passed** (~1 min 45, plusieurs tests GPU).
+Tests : `python3 -m pytest tests/ -q` → **236 passed** (~2 min, plusieurs tests GPU).
 Git : dépôt `github.com:Etienne-Lamy/AGI-Claude` (SSH). **Ne jamais pousser sans
 accord explicite de l'auteur.**
 
