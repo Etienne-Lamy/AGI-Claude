@@ -14,21 +14,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 # Actions pertinentes pour le dashboard (le reste du log est trop verbeux).
-# Vocabulaire v6 (scl/*.py, réécriture Phases 0-11) — l'ancien vocabulaire
-# F1-F25 (choix_mode, chantier_*, barreaux, consolidation_hebbienne...)
-# n'existe plus, les mécanismes correspondants ont été remplacés.
+# Vocabulaire v7 (dashboard « modules / graphe / champ ») — produit par
+# scl/demo_viewer.py et les détecteurs/orchestrateurs des étapes 10-15.
 ACTIONS_UTILES = {
-    # instantané principal de l'agent (vocabulaire v6 : émergence par curiosité)
-    "pouls",
-    # émergence de la dynamique du corps
-    "creation_predicteur",
-    # cycle de vie des modules (graphe)
-    "creation_candidat", "creation_module", "verrouillage", "atrophie_abandon",
-    "confirmation_reelle",
-    # bilan quotidien
-    "resume_journee",
-    # persistance
-    "sauvegarde", "chargement",
+    # méta + rythme des phases
+    "meta", "phase", "programme_choisi",
+    # champ VU vs PRÉVU + état des modules au fil du temps
+    "champ", "modules_etat",
+    # cycle de vie des modules-régime
+    "naissance_module_regime", "verrouillage_module_regime",
+    # graphe de branchement de l'orchestrateur (Mode A)
+    "programme_evalue",
+    # rétro-compat POC v6 (si on rejoue un vieux log run_poc.py)
+    "pouls", "creation_predicteur", "resume_journee",
 }
 MAX_LIGNES_PAR_REQUETE = 8000
 

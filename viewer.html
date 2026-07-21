@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>SCL — Émergence par curiosité</title>
+<title>SCL — Modules, graphe & champ (v7)</title>
 <style>
   :root{
     --fond:#0e1016; --pan:#171a22; --bord:#272b36; --txt:#d7dae2; --sourd:#828a9c;
@@ -15,190 +15,256 @@
          padding:10px 16px;border-bottom:1px solid var(--bord);background:var(--pan)}
   header h1{font-size:15px;margin:0;color:var(--acc);font-weight:600}
   header .stat{color:var(--sourd)} header .stat b{color:var(--txt);font-weight:600}
-  .wrap{display:grid;grid-template-columns:300px 1fr 340px;gap:12px;padding:12px}
+  .wrap{display:grid;grid-template-columns:1fr 320px;grid-template-rows:auto auto;gap:12px;padding:12px}
   @media(max-width:1100px){.wrap{grid-template-columns:1fr}}
-  .pan{background:var(--pan);border:1px solid var(--bord);border-radius:8px;padding:12px;margin-bottom:12px}
+  .pan{background:var(--pan);border:1px solid var(--bord);border-radius:8px;padding:12px}
   .pan h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--sourd);
-          margin:0 0 10px}
-  .col{min-width:0}
-  canvas{display:block;image-rendering:pixelated}
-  .champs{display:flex;gap:16px;justify-content:space-around;align-items:flex-end}
-  .champ{text-align:center} .champ .lg{font-size:10px;color:var(--sourd);margin-top:4px}
+          margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+  .pan h2 .aux{text-transform:none;letter-spacing:0;color:var(--txt);font-weight:400}
+  /* champ */
+  #p-champ{grid-column:1;grid-row:1}
+  .champs{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+  .champ .lg{font-size:10px;color:var(--sourd);margin-bottom:4px}
+  .fieldbox{max-width:340px;max-height:340px;overflow:auto;border:1px solid var(--bord);
+            border-radius:4px;background:#0c0e13}
+  .zoomrow{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--sourd)}
+  .zoomrow input[type=range]{width:180px}
   .legende{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--sourd)}
   .legende i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-  .bars{display:flex;flex-direction:column;gap:8px}
-  .bar{display:flex;align-items:center;gap:8px}
-  .bar .lbl{width:74px;color:var(--sourd);font-size:12px;text-align:right}
-  .bar .track{flex:1;height:16px;background:#0c0e13;border-radius:4px;overflow:hidden;position:relative}
-  .bar .fill{height:100%;border-radius:4px;transition:width .3s,background .3s}
-  .bar .val{width:52px;font-size:11px;color:var(--sourd)}
-  .feed{max-height:640px;overflow:auto;font-size:12px}
-  .ev{padding:5px 6px;border-bottom:1px solid #1f232d;line-height:1.35}
-  .ev .t{color:var(--sourd);margin-right:6px}
-  .ev.creation{color:var(--vio)} .ev.maitrise{color:var(--ok)} .ev.jour{color:var(--acc)}
+  /* graphe */
+  #p-graphe{grid-column:1;grid-row:2}
+  .progs{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .prog{display:flex;align-items:center;gap:8px;font-size:12px}
+  .prog .chips{flex:1;display:flex;gap:4px;flex-wrap:wrap}
+  .chip{background:#0c0e13;border:1px solid var(--bord);border-radius:10px;padding:1px 8px;font-size:11px}
+  .chip.on{border-color:var(--acc);color:var(--acc)}
+  .prog .track{width:120px;height:12px;background:#0c0e13;border-radius:4px;overflow:hidden}
+  .prog .fill{height:100%}
+  .prog .g{width:78px;color:var(--sourd);text-align:right}
+  .prog.best .chip{border-color:var(--ok)}
+  /* modules */
+  #p-modules{grid-column:2;grid-row:1 / span 2}
+  .mod{border:1px solid var(--bord);border-radius:6px;padding:8px;margin-bottom:8px;background:#0c0e13}
+  .mod.actif{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+  .mod .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .mod .name{color:var(--txt);font-weight:600}
+  .mod .badge{font-size:10px;color:var(--sourd)}
+  .mod .badge.lock{color:var(--ok)}
+  .mod .meta{font-size:10px;color:var(--sourd);margin-top:3px;display:flex;justify-content:space-between}
+  .spark{display:block;width:100%;height:30px}
   .hint{color:var(--sourd);font-size:11px;margin-top:8px;line-height:1.4}
   .off{color:var(--warn)}
+  .pill{font-size:11px;padding:1px 8px;border-radius:10px;background:#0c0e13;border:1px solid var(--bord)}
 </style>
 </head>
 <body>
 <header>
-  <h1>SCL — émergence par curiosité</h1>
-  <span class="stat">pas <b id="s-t">–</b></span>
-  <span class="stat">pos <b id="s-pos">–</b></span>
-  <span class="stat">vitesse <b id="s-v">–</b></span>
-  <span class="stat">action <b id="s-a">–</b></span>
-  <span class="stat">incert. vision <b id="s-iv">–</b></span>
-  <span class="stat">prédicteurs <b id="s-np">0</b></span>
-  <span class="stat">accél. maîtrisées <b id="s-nm">0</b>/4</span>
+  <h1>SCL — modules · graphe · champ</h1>
+  <span class="stat">phase <b id="s-phase">–</b></span>
+  <span class="stat">pas <b id="s-step">–</b></span>
+  <span class="stat">modules <b id="s-nmod">0</b></span>
+  <span class="stat">régime <b id="s-reg">–</b></span>
+  <span class="stat">meilleur programme <b id="s-best">–</b></span>
   <span class="stat" id="s-live">● live</span>
 </header>
 
 <div class="wrap">
-  <div class="col">
-    <div class="pan">
-      <h2>Champ visuel — vu vs prévu (reconstruction vision)</h2>
-      <div class="champs">
-        <div class="champ"><canvas id="cv-vu" width="170" height="170"></canvas><div class="lg">VU (capteur)</div></div>
-        <div class="champ"><canvas id="cv-prevu" width="170" height="170"></canvas><div class="lg">PRÉVU (module)</div></div>
-      </div>
-      <div class="legende">
-        <span><i style="background:#5fd08a"></i>sucre</span>
-        <span><i style="background:#e08a3c"></i>bâton</span>
-        <span><i style="background:#3a6ea5"></i>corps</span>
-        <span><i style="background:#12141a;border:1px solid #2b2f3d"></i>vide</span>
-      </div>
-      <div class="hint">Quand PRÉVU ressemble à VU, la vision a maîtrisé le champ statique
-        — premier palier d'émergence, avant que l'agent ne se mette à bouger.</div>
+  <div class="pan" id="p-champ">
+    <h2>Champ visuel — VU vs PRÉVU <span class="aux" id="champ-rap"></span></h2>
+    <div class="zoomrow">
+      zoom <input type="range" id="zoom" min="4" max="46" value="16">
+      <span id="zoomlbl">16 px</span>
+      <span class="hint" style="margin:0">au-delà d'un certain zoom, le champ déborde du cadre (défilement).</span>
     </div>
-    <div class="pan">
-      <h2>Incertitude de la vision (↓ = maîtrise du champ statique)</h2>
-      <canvas id="cv-iv" width="276" height="90"></canvas>
+    <div class="champs">
+      <div class="champ"><div class="lg">VU (capteur)</div>
+        <div class="fieldbox"><canvas id="cv-vu"></canvas></div></div>
+      <div class="champ"><div class="lg">PRÉVU (module actif : transition T-1→T)</div>
+        <div class="fieldbox"><canvas id="cv-prevu"></canvas></div></div>
     </div>
+    <div class="legende">
+      <span><i style="background:#5fd08a"></i>sucre</span>
+      <span><i style="background:#e08a3c"></i>bâton</span>
+      <span><i style="background:#3a6ea5"></i>corps</span>
+      <span><i style="background:#12141a;border:1px solid #2b2f3d"></i>vide</span>
+    </div>
+    <div class="hint">Quand PRÉVU rejoint VU, le module actif a appris la dynamique du régime
+      courant. Le rappel (en haut à droite) est la part d'objets correctement prédits.</div>
   </div>
 
-  <div class="col">
-    <div class="pan">
-      <h2>Maîtrise de la dynamique du corps — incertitude par accélération</h2>
-      <div class="bars" id="bars"></div>
-      <div class="hint">Chaque accélération est un « régime » que l'agent doit apprendre à prédire.
-        Barre <span style="color:var(--warn)">orange</span> = incertain (à explorer),
-        <span style="color:var(--ok)">verte</span> = maîtrisé (incertitude &lt; 0.02).
-        La curiosité pousse l'agent vers l'accélération la plus incertaine, région par région.</div>
-    </div>
-    <div class="pan">
-      <h2>Trajectoire (monde)</h2>
-      <canvas id="cv-traj" width="620" height="300"></canvas>
-    </div>
+  <div class="pan" id="p-graphe">
+    <h2>Graphe de branchement de l'orchestrateur <span class="aux" id="graphe-info"></span></h2>
+    <svg id="svg-graphe" viewBox="0 0 460 200" style="width:100%;max-width:520px;height:200px"></svg>
+    <div class="progs" id="progs"></div>
+    <div class="hint">Nœuds = types de signal (champ / latent). Arêtes = opérateurs typés.
+      En <span style="color:var(--acc)">bleu</span> : les opérateurs du programme choisi.
+      Chaque ligne = un programme évalué (valeur = G − λ·coût).</div>
   </div>
 
-  <div class="col">
-    <div class="pan">
-      <h2>Événements d'émergence</h2>
-      <div class="feed" id="feed"></div>
-    </div>
+  <div class="pan" id="p-modules">
+    <h2>Modules — naissance & entraînement</h2>
+    <div id="mods"></div>
+    <div class="hint">Un module naît sur surprise confirmée ; sa courbe montre le rappel
+      lissé qui monte à mesure qu'il apprend son régime. 🔒 = verrouillé (spécialisé).</div>
   </div>
 </div>
 
 <script>
-const ACCELS = [[0,0],[1,0],[-1,0],[0,1],[0,-1]];
-const NOM_ACCEL = {"0,0":"immobile","1,0":"+x","-1,0":"−x","0,1":"+y","0,-1":"−y"};
-const SEUIL_MAITRISE = 0.02, RES = 10;
-let offset = 0, ivSeries = [], traj = [], dernierPouls = null;
+const OPS = {compresser:["champ","latent"], generer:["latent","champ"],
+             predire_champ:["champ","champ"], predire_latent:["latent","latent"]};
+let offset=0;
+const S = {H:10, W:10, phase:"–", step:0, regime:"–",
+           champ:null, mods:{}, order:[], progs:{}, chosen:null, best:"–"};
 
+/* ---------- champ ---------- */
 function couleurChamp(v){
-  if(v < 0.12) return "#12141a";         // vide
-  if(v < 0.37) return "#3a6ea5";         // corps
-  if(v < 0.75) return "#e08a3c";         // bâton
-  return "#5fd08a";                       // sucre
+  if(v < 0.12) return "#12141a";      // vide
+  if(v < 0.37) return "#3a6ea5";      // corps
+  if(v < 0.75) return "#e08a3c";      // bâton
+  return "#5fd08a";                    // sucre
 }
-function dessineChamp(id, str){
-  const cv=document.getElementById(id), ctx=cv.getContext("2d"), px=cv.width/RES;
+function dessineChamp(id, grille){
+  const cv=document.getElementById(id), ctx=cv.getContext("2d");
+  const px=+document.getElementById("zoom").value;
+  const H=grille?grille.length:S.H, W=grille?grille[0].length:S.W;
+  cv.width=W*px; cv.height=H*px;
   ctx.clearRect(0,0,cv.width,cv.height);
-  if(!str) return;
-  const vals=str.split(",").map(parseFloat);
-  for(let i=0;i<RES;i++) for(let j=0;j<RES;j++){
-    ctx.fillStyle=couleurChamp(vals[i*RES+j]||0);
-    ctx.fillRect(j*px+0.5, i*px+0.5, px-1, px-1);   // carré avec fin liseré
+  if(!grille) return;
+  for(let i=0;i<H;i++) for(let j=0;j<W;j++){
+    ctx.fillStyle=couleurChamp(grille[i][j]||0);
+    ctx.fillRect(j*px+0.5, i*px+0.5, Math.max(1,px-1), Math.max(1,px-1));
   }
 }
-function dessineCourbe(id, serie, seuil){
-  const cv=document.getElementById(id), ctx=cv.getContext("2d");
-  ctx.clearRect(0,0,cv.width,cv.height);
-  if(serie.length<2) return;
-  const W=cv.width,H=cv.height,n=serie.length,mx=Math.max(0.03,...serie);
-  const x=i=>i/(n-1)*(W-4)+2, y=v=>H-4-v/mx*(H-14);
-  if(seuil){ctx.strokeStyle="#2f3a2f";ctx.setLineDash([4,3]);ctx.beginPath();
-    ctx.moveTo(2,y(seuil));ctx.lineTo(W-2,y(seuil));ctx.stroke();ctx.setLineDash([]);}
-  ctx.strokeStyle="#6fb3ff";ctx.lineWidth=1.5;ctx.beginPath();
-  serie.forEach((v,i)=>{i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v));});
-  ctx.stroke();
-  ctx.fillStyle="#828a9c";ctx.font="10px monospace";ctx.fillText(serie[n-1].toFixed(4),4,11);
+function renduChamp(){
+  const c=S.champ;
+  dessineChamp("cv-vu", c?c.vu:null);
+  dessineChamp("cv-prevu", c?c.prevu:null);
+  document.getElementById("champ-rap").textContent =
+    c? `régime ${c.regime} · module ${c.module} · rappel ${(c.rappel*100).toFixed(0)}%` : "";
 }
-function dessineTraj(){
-  const cv=document.getElementById("cv-traj"), ctx=cv.getContext("2d");
-  ctx.clearRect(0,0,cv.width,cv.height);
-  if(traj.length<2) return;
-  const xs=traj.map(p=>p[0]),ys=traj.map(p=>p[1]);
-  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
-  const pad=8,W=cv.width-2*pad,H=cv.height-2*pad;
-  const s=Math.min(W/Math.max(1,x1-x0),H/Math.max(1,y1-y0));
-  const px=x=>pad+(x-x0)*s, py=y=>pad+(y-y0)*s;
-  ctx.strokeStyle="#333a49";ctx.lineWidth=1;ctx.beginPath();
-  traj.forEach((p,i)=>{i?ctx.lineTo(px(p[0]),py(p[1])):ctx.moveTo(px(p[0]),py(p[1]));});
-  ctx.stroke();
-  const last=traj[traj.length-1];
-  ctx.fillStyle="#6fb3ff";ctx.beginPath();ctx.arc(px(last[0]),py(last[1]),3.5,0,7);ctx.fill();
+
+/* ---------- modules ---------- */
+function sparkline(hist){
+  const n=hist.length; if(n<2) return "";
+  const W=250,H=30, pts=hist.map((v,i)=>{
+    const x=i/(n-1)*(W-4)+2, y=H-2-(Math.max(0,Math.min(1,v)))*(H-6);
+    return x.toFixed(1)+","+y.toFixed(1);
+  }).join(" ");
+  const seuil=H-2-0.5*(H-6);
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="2" y1="${seuil}" x2="${W-2}" y2="${seuil}" stroke="#2b2f3d" stroke-dasharray="3,3"/>
+    <polyline points="${pts}" fill="none" stroke="#6fb3ff" stroke-width="1.6"/></svg>`;
 }
-function dessineBars(dyn){
-  const box=document.getElementById("bars");box.innerHTML="";
-  const maxv=Math.max(0.05,...ACCELS.map(a=>dyn[a[0]+","+a[1]]??0));
-  ACCELS.forEach(a=>{
-    const k=a[0]+","+a[1], v=dyn[k]??0, maitr=(v<SEUIL_MAITRISE);
-    const row=document.createElement("div");row.className="bar";
-    row.innerHTML=`<span class="lbl">${NOM_ACCEL[k]}</span>
-      <span class="track"><span class="fill" style="width:${Math.min(100,v/maxv*100)}%;
-        background:${maitr?'var(--ok)':'var(--warn)'}"></span></span>
-      <span class="val">${v.toFixed(4)}</span>`;
-    box.appendChild(row);
+function renduModules(){
+  const box=document.getElementById("mods"); box.innerHTML="";
+  S.order.forEach(id=>{
+    const m=S.mods[id];
+    const d=document.createElement("div");
+    d.className="mod"+(m.actif?" actif":"");
+    const r=(m.hist.length?m.hist[m.hist.length-1]:null);
+    d.innerHTML=`<div class="top"><span class="name">${id}</span>
+      <span class="badge ${m.lock?'lock':''}">${m.lock?'🔒 verrouillé':'en apprentissage'}</span></div>
+      ${sparkline(m.hist)}
+      <div class="meta"><span>né au pas ${m.birth??'?'}</span>
+        <span>rappel ${r!=null?(r*100).toFixed(0)+'%':'–'}</span></div>`;
+    box.appendChild(d);
   });
+  document.getElementById("s-nmod").textContent=S.order.length;
 }
-function ajouteEvent(cls,t,txt){
-  const feed=document.getElementById("feed");
-  const d=document.createElement("div");d.className="ev "+cls;
-  d.innerHTML=`<span class="t">j${t.jour}:${t.step}</span>${txt}`;
-  feed.insertBefore(d,feed.firstChild);
-  while(feed.children.length>200) feed.removeChild(feed.lastChild);
+
+/* ---------- graphe de branchement ---------- */
+const NODE={champ:{x:90,y:100}, latent:{x:370,y:100}};
+function arete(op){
+  const [a,b]=OPS[op], p1=NODE[a], p2=NODE[b];
+  if(a===b){ // boucle sur soi (au-dessus du nœud)
+    const cx=p1.x, cy=p1.y-46;
+    return {d:`M ${p1.x-16} ${p1.y-14} C ${cx-40} ${cy}, ${cx+40} ${cy}, ${p1.x+16} ${p1.y-14}`,
+            lx:cx, ly:cy-4};
+  }
+  const midy = (a==="champ"?p1.y-30:p1.y+30);   // compresser en haut, generer en bas
+  return {d:`M ${p1.x+18} ${p1.y} Q ${(p1.x+p2.x)/2} ${midy} ${p2.x-18} ${p2.y}`,
+          lx:(p1.x+p2.x)/2, ly:midy+(a==="champ"?-6:14)};
+}
+function renduGraphe(){
+  const svg=document.getElementById("svg-graphe");
+  const usedByBest=new Set(S.chosen||[]);
+  let s=`<defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#4a5163"/></marker>
+    <marker id="arb" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#6fb3ff"/></marker></defs>`;
+  for(const op in OPS){
+    const g=arete(op), on=usedByBest.has(op);
+    s+=`<path d="${g.d}" fill="none" stroke="${on?'#6fb3ff':'#4a5163'}"
+         stroke-width="${on?2.4:1.3}" marker-end="url(#${on?'arb':'ar'})"/>`;
+    s+=`<text x="${g.lx}" y="${g.ly}" fill="${on?'#6fb3ff':'#828a9c'}" font-size="10"
+         text-anchor="middle">${op}</text>`;
+  }
+  for(const t in NODE){
+    const p=NODE[t];
+    s+=`<circle cx="${p.x}" cy="${p.y}" r="26" fill="#171a22" stroke="#b98bff" stroke-width="1.6"/>
+        <text x="${p.x}" y="${p.y+4}" fill="#d7dae2" font-size="12" text-anchor="middle">${t}</text>`;
+  }
+  svg.innerHTML=s;
+  // liste des programmes classés par valeur
+  const arr=Object.values(S.progs).sort((a,b)=>b.valeur-a.valeur);
+  const mx=Math.max(0.01,...arr.map(p=>Math.abs(p.valeur)));
+  const box=document.getElementById("progs"); box.innerHTML="";
+  arr.forEach(p=>{
+    const best = S.chosen && p.chaine.join(">")===S.chosen.join(">");
+    const chips=p.chaine.map(o=>`<span class="chip ${S.chosen&&S.chosen.includes(o)?'on':''}">${o}</span>`).join("");
+    const w=Math.min(100,Math.abs(p.valeur)/mx*100), pos=p.valeur>=0;
+    const d=document.createElement("div"); d.className="prog"+(best?" best":"");
+    d.innerHTML=`<div class="chips">${chips}</div>
+      <div class="track"><div class="fill" style="width:${w}%;
+        background:${pos?'var(--ok)':'var(--dng)'}"></div></div>
+      <div class="g">G ${(p.G*100).toFixed(0)}% · v ${p.valeur.toFixed(2)}</div>`;
+    box.appendChild(d);
+  });
+  document.getElementById("graphe-info").textContent =
+    arr.length? `${arr.length} programmes évalués` : "";
+}
+
+/* ---------- ingestion ---------- */
+function ensureMod(id, step){
+  if(!S.mods[id]){ S.mods[id]={birth:step, lock:false, actif:false, hist:[]}; S.order.push(id); }
+  return S.mods[id];
 }
 function traite(rec){
-  if(rec.action==="pouls"){
-    dernierPouls=rec;
-    if(rec.inc_vision!=null){ivSeries.push(rec.inc_vision);if(ivSeries.length>200)ivSeries.shift();}
-    if(rec.position){traj.push(rec.position);if(traj.length>400)traj.shift();}
-  } else if(rec.action==="creation_predicteur"){
-    ajouteEvent("creation",rec,`\u{1F331} nouveau prédicteur de dynamique pour accél. <b>${(rec.accel||[]).join(",")}</b> (total ${rec.n_predicteurs})`);
-  } else if(rec.action==="creation_candidat"){
-    ajouteEvent("creation",rec,`＋ module candidat <b>${rec.module||""}</b> (${rec.point||""})`);
-  } else if(rec.action==="verrouillage"){
-    ajouteEvent("maitrise",rec,`\u{1F512} ${rec.module||""} verrouillé (compétence confirmée)`);
-  } else if(rec.action==="resume_journee"){
-    ajouteEvent("jour",rec,`bilan jour ${rec.jour} — vision ${rec.incertitude_vision}, prédicteurs ${rec.n_predicteurs_dynamique}, maîtrisées ${rec.n_accels_maitrisees}`);
+  S.step=rec.step??S.step;
+  const a=rec.action;
+  if(a==="meta"){ S.H=rec.h||10; S.W=rec.w||10; }
+  else if(a==="phase"){ if(rec.nom) S.phase=rec.nom; }
+  else if(a==="naissance_module_regime"){ ensureMod(rec.module, rec.step); }
+  else if(a==="verrouillage_module_regime"){ const m=S.mods[rec.acteur]; if(m) m.lock=true; }
+  else if(a==="modules_etat"){
+    S.regime=rec.regime??S.regime;
+    (rec.etats||[]).forEach(e=>{
+      const m=ensureMod(e.id, rec.step); m.actif=!!e.actif;
+      if(e.verrouille) m.lock=true;
+      if(e.rappel!=null){ m.hist.push(e.rappel); if(m.hist.length>160) m.hist.shift(); }
+    });
+    // un seul actif à la fois
+    Object.keys(S.mods).forEach(id=>{ if(!(rec.etats||[]).some(e=>e.id===id&&e.actif)) S.mods[id].actif=false; });
   }
+  else if(a==="champ"){ S.champ={vu:rec.vu, prevu:rec.prevu, rappel:rec.rappel||0,
+                                 regime:rec.regime, module:rec.module}; S.regime=rec.regime??S.regime; }
+  else if(a==="programme_evalue"){ S.progs[rec.chaine.join(">")]=
+      {chaine:rec.chaine, G:rec.G||0, cout:rec.cout||0, valeur:rec.valeur||0}; }
+  else if(a==="programme_choisi"){ S.chosen=rec.chaine; S.best=rec.chaine.join(" → "); }
 }
-function rendu(){
-  const p=dernierPouls;if(!p)return;
-  document.getElementById("s-t").textContent=p.t;
-  document.getElementById("s-pos").textContent=(p.position||[]).join(", ");
-  document.getElementById("s-v").textContent=(p.vitesse||[]).join(", ");
-  document.getElementById("s-a").textContent=(p.action_choisie||[]).join(", ");
-  document.getElementById("s-iv").textContent=(p.inc_vision??"–");
-  document.getElementById("s-np").textContent=p.n_predicteurs??0;
-  document.getElementById("s-nm").textContent=p.n_maitrises??0;
-  dessineChamp("cv-vu",p.champ_vu);
-  dessineChamp("cv-prevu",p.champ_prevu);
-  dessineCourbe("cv-iv",ivSeries,SEUIL_MAITRISE);
-  dessineTraj();
-  if(p.dyn_incertitude) dessineBars(p.dyn_incertitude);
+function renduEntete(){
+  document.getElementById("s-phase").textContent=S.phase;
+  document.getElementById("s-step").textContent=S.step;
+  document.getElementById("s-reg").textContent=S.regime;
+  document.getElementById("s-best").textContent=S.best;
 }
+function rendu(){ renduChamp(); renduModules(); renduGraphe(); renduEntete(); }
+
+document.getElementById("zoom").addEventListener("input", e=>{
+  document.getElementById("zoomlbl").textContent=e.target.value+" px"; renduChamp();
+});
+
 async function poll(){
   try{
     const r=await fetch("/data?offset="+offset), d=await r.json();
@@ -208,7 +274,7 @@ async function poll(){
     live.className=d.eof?"stat off":"stat";
     rendu();
   }catch(e){ document.getElementById("s-live").textContent="⚠ serveur"; }
-  setTimeout(poll,400);
+  setTimeout(poll, 400);
 }
 poll();
 </script>
