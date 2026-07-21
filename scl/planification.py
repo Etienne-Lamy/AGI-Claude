@@ -63,3 +63,56 @@ def choisir_glouton(modele_r, champ, n_actions, epsilon=0.1):
         return random.randrange(n_actions)
     scores = [modele_r.predire(champ, a) for a in range(n_actions)]
     return int(np.argmax(scores))
+
+
+class ModeleValeurQ(torch.nn.Module):
+    """Q(champ, action) = g() + h() COMBINÉS (étape 19, §6) : la valeur d'agir, qui unit
+    la récompense immédiate (g, le coût du pas) et la valeur du reste à faire (h, l'avenir).
+    Apprise par TD (bootstrap) : Q(s,a) ← r + γ·max_a' Q(s',a'). C'est ce bootstrap qui fait
+    REMONTER le crédit d'une récompense lointaine (sucre) vers les états/actions en amont —
+    donc VISER le sucre, pas seulement éviter la douleur immédiate (étape 18). Tête façon
+    DQN (champ → une valeur par action) : le max sur les actions est immédiat.
+
+    Sans modèle pour la SÉLECTION (robuste au décalage de vitesse du modèle de transition) ;
+    le modèle de transition `agir` sert au rejeu IMAGINÉ nocturne (étape 20)."""
+
+    def __init__(self, n_cellules=100, n_actions=5, h=128, gamma=0.95, capacite=8000):
+        super().__init__()
+        self.n_actions = n_actions
+        self.gamma = gamma
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(n_cellules, h), torch.nn.ReLU(),
+            torch.nn.Linear(h, h), torch.nn.ReLU(),
+            torch.nn.Linear(h, n_actions))
+        self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+        self.buffer = deque(maxlen=capacite)     # (s_flat, a, r, s2_flat)
+        self.to(DEVICE)
+
+    def _flat(self, champ):
+        return torch.as_tensor(np.asarray(champ), dtype=torch.float32, device=DEVICE).reshape(-1)
+
+    def q(self, champ):
+        with torch.no_grad():
+            return self.net(self._flat(champ).unsqueeze(0)).squeeze(0)
+
+    def choisir(self, champ, epsilon=0.1):
+        if random.random() < epsilon:
+            return random.randrange(self.n_actions)
+        return int(torch.argmax(self.q(champ)))
+
+    def observer(self, s, a, r, s2, lot=64):
+        """Ajoute la transition et fait un pas de TD sur un mini-lot (enseignement #10)."""
+        self.buffer.append((np.asarray(s, np.float32).reshape(-1), int(a), float(r),
+                            np.asarray(s2, np.float32).reshape(-1)))
+        n = min(len(self.buffer), lot)
+        ech = random.sample(list(self.buffer), n)
+        S = torch.stack([torch.as_tensor(c, device=DEVICE) for c, _, _, _ in ech])
+        A = torch.tensor([a for _, a, _, _ in ech], device=DEVICE).unsqueeze(1)
+        R = torch.tensor([r for _, _, r, _ in ech], dtype=torch.float32, device=DEVICE)
+        S2 = torch.stack([torch.as_tensor(c, device=DEVICE) for _, _, _, c in ech])
+        q_sa = self.net(S).gather(1, A).squeeze(1)
+        with torch.no_grad():
+            cible = R + self.gamma * self.net(S2).max(1).values
+        perte = torch.nn.functional.mse_loss(q_sa, cible)
+        self.opt.zero_grad(); perte.backward(); self.opt.step()
+        return float(perte.detach())
