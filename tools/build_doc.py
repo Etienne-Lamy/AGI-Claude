@@ -30,7 +30,7 @@ def _tectonic():
     return os.environ.get("TECTONIC") or shutil.which("tectonic")
 
 
-def construire(md_path: str, auteur="Projet SCL", date="2026-07-21"):
+def construire(md_path: str, auteur="Etienne Lamy", date="2026-07-21"):
     md = Path(md_path).resolve()
     if not md.exists():
         sys.exit(f"introuvable : {md}")
