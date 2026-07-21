@@ -5,6 +5,9 @@
 > Docs de fond (source de vérité, lues à la demande) : `SCL - Vision et Strategie.md`,
 > `SCL_fondements_mathematiques.md`, `Architecture SCL Code v2.md` (dont **§27-§30**,
 > écrits pour l'orchestrateur), `README v2.md`.
+> Bilan de phase (récit succès/échecs/leçons, .md/.tex/.pdf) :
+> `SCL_bilan_modules_orchestrateur.md` — reconstruire les dérivés :
+> `TECTONIC=<bin> python3 tools/build_doc.py SCL_bilan_modules_orchestrateur.md`.
 
 ---
 

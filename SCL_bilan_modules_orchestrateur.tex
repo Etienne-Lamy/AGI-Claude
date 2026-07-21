@@ -1,0 +1,671 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  french,
+  11pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\ifLuaTeX
+\usepackage[bidi=basic,shorthands=off]{babel}
+\else
+\usepackage[bidi=default,shorthands=off]{babel}
+\fi
+\ifLuaTeX
+  \usepackage{selnolig} % disable illegal ligatures
+\fi
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={SCL --- Bilan de la phase « Modules \& Orchestrateur »},
+  pdfauthor={Projet SCL},
+  pdflang={fr},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{SCL --- Bilan de la phase « Modules \& Orchestrateur »}
+\author{Projet SCL}
+\date{2026-07-21}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+\begin{quote}
+\emph{Ce qui a marché, ce qui a échoué, et ce qu'on en a appris.}
+Document de phase, versionné (\texttt{.md} canonique, \texttt{.tex} +
+\texttt{.pdf} dérivés). Rédigé le 2026-07-21. Couvre les étapes 1→15
+(POC 2D « sucres/bâtons »). Docs de fond :
+\texttt{SCL\ -\ Vision\ et\ Strategie.md},
+\texttt{SCL\_fondements\_mathematiques.md},
+\texttt{Architecture\ SCL\ Code\ v2.md}, \texttt{STATUS.md}.
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{0. Résumé}\label{ruxe9sumuxe9}
+
+Cette phase a construit et éprouvé les deux briques centrales de SCL sur
+un bac à sable 2D : le \textbf{module détecteur/générateur} (qui
+compresse puis régénère un signal, et dont le goulot est le siège de la
+parcimonie) et l'\textbf{orchestrateur} (qui compose ces modules en
+programmes). Le but n'était pas de « bien jouer » au monde mais de
+\textbf{prouver l'émergence} : catégories, régimes, règles et
+compositions apparaissent par la mesure, sans être donnés.
+
+Le résultat tient en une phrase : \textbf{tout ce qui compte se laisse
+mesurer sans unité et sans étiquette} --- un rappel d'objets dans
+{[}0,1{]}, un gain de prédictibilité contre un prior trivial, une
+familiarité --- et c'est cette scale-freeness qui permet à la structure
+d'émerger et à l'orchestrateur de choisir. Chaque échec de la phase
+vient, à l'inverse, d'une grandeur \textbf{sans référence} (une perte
+scalaire, un latent opaque, un critère relatif confondu par l'amplitude)
+; chaque correctif consiste à \textbf{réancrer la mesure}.
+
+Ce document insiste autant sur les impasses que sur les réussites : les
+impasses sont la matière première de l'auto-diagnostic futur de
+l'orchestrateur (§28.3 de l'Architecture).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{1. Cadre : ce que la phase devait
+prouver}\label{cadre-ce-que-la-phase-devait-prouver}
+
+Le monde 2D (grille, sucres, bâtons, un agent qui accélère, parfois du
+vent) est un \textbf{banc de preuve d'émergence}, pas une tâche à
+maximiser. On y vérifie que :
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  un module apprend à \textbf{compresser puis reconstruire} la vision,
+  avec un \textbf{goulot} qui réduit réellement l'information
+  (parcimonie / MDL, §5) ;
+\item
+  des \textbf{catégories} apparaissent sans classes données ;
+\item
+  des \textbf{régimes} (vitesses, vent) sont identifiés comme des
+  signatures récurrentes ;
+\item
+  une \textbf{hiérarchie} se forme (champ → régime → règle
+  action→régime) ;
+\item
+  un \textbf{orchestrateur} compose les modules en \textbf{programmes}
+  et choisit le meilleur par la mesure, d'abord par recherche, puis par
+  une politique \textbf{apprise} ;
+\item
+  un cycle \textbf{jour/nuit} capture l'imprévu le jour et le
+  \textbf{comprend} la nuit.
+\end{enumerate}
+
+Contraintes non négociables rappelées tout au long : \textbf{codage en
+dur minimal} (toute adaptation manuelle = dette documentée),
+\textbf{parcimonie comme moteur}, \textbf{catégories émergentes},
+\textbf{l'orchestrateur compose des fonctions} (jamais de combinaison
+linéaire), \textbf{verrouillage asymétrique} (plancher jamais plafond),
+\textbf{création sur surprise confirmée}, \textbf{apprentissage local},
+\textbf{activation creuse}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{2. Partie I --- Le module
+détecteur/générateur}\label{partie-i-le-module-duxe9tecteurguxe9nuxe9rateur}
+
+\subsection{2.1 Le principe : le goulot est le siège de la
+valeur}\label{le-principe-le-goulot-est-le-siuxe8ge-de-la-valeur}
+
+Un module = un encodeur (champ → latent) + un générateur (latent →
+champ). La \textbf{taille interne} peut être grande (un bon générateur
+coûte cher) ; \textbf{seul le goulot compte} : il doit produire une
+sortie \textbf{plus petite que l'entrée}. C'est la traduction opératoire
+du MDL : ce qui survit est ce qui \textbf{réduit} la description tout en
+la \textbf{régénérant}.
+
+\textbf{Mesuré (étape 1)} : goulot \textbf{64 \textless{} 100} pixels,
+reconstruction des objets à \textbf{F1 90 \%}. La compression est réelle
+\emph{et} fidèle.
+
+\subsection{2.2 Ce qui a marché}\label{ce-qui-a-marchuxe9}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Convolution avant le goulot.} C'est le biais inductif qui rend
+  la vision compressible ; sans lui, aucune taille de latent ne suffit
+  (voir 2.3).
+\item
+  \textbf{Perte pondérée / classification par cellule.} Le champ est
+  \textasciitilde90 \% vide ; une MSE se minimise en sortant du noir.
+  Pondérer la classe rare (objets) évite l'effondrement.
+\item
+  \textbf{Prédiction T-1 → T comme sonde de vitesse (étape 2a).} La
+  fidélité de transition est élevée \textbf{à la vitesse entraînée}
+  (rappel \textbf{84 \%}) et s'effondre ailleurs
+  (\textbf{\textasciitilde20 \%}) : la même mesure sert de
+  \textbf{détecteur de régime}, sans détecteur dédié.
+\item
+  \textbf{Catégorisation émergente par VQ (étape 5).} Un encodeur
+  \textbf{1×1} (apparence locale, sans contexte) + quantification
+  vectorielle fait \textbf{émerger 4 catégories} (sur 6 prototypes, le
+  reste élagué), \textbf{100 \% pures}, reconstruction 100 \%. Aucune
+  étiquette.
+\item
+  \textbf{Décomposition en objets par slot-attention (étape 4).}
+  Reconstruction \textbf{94 \%}, et surtout une \textbf{prédiction
+  triviale} : décaler les objets prédit l'image suivante à \textbf{80
+  \%} \emph{sans aucun réseau de prédiction}.
+\item
+  \textbf{Choix de taille par MDL (étape 3).} Sur un catalogue
+  {[}8..96{]}, l'orchestrateur naïf choisit \textbf{dim 48} --- ni sous-
+  ni sur-dimensionné --- par le seul compromis gain/coût.
+\end{itemize}
+
+\subsection{2.3 Ce qui a échoué --- et le signal objectif qui l'a
+trahi}\label{ce-qui-a-uxe9chouuxe9-et-le-signal-objectif-qui-la-trahi}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Échec
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Symptôme mesuré
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Correctif générique
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Effondrement à zéro & perte basse \emph{mais} rappel objets nul & perte
+pondérée ; \textbf{ne jamais conclure sur une perte scalaire} \\
+Plafond insensible à la capacité & MLP à \textasciitilde44 \% que le
+latent fasse 48, 100 ou 200 & ce n'est pas la taille, c'est le
+\textbf{biais inductif} → conv ; balayage de capacité comme
+diagnostic \\
+Compression ≠ fidélité pure & conv pleine résolution reconstruit à 100
+\% mais \textbf{expanse} (300 \textgreater{} 100) & le goulot doit
+\textbf{réduire}, pas seulement copier \\
+Critères sans unité & latent brut à magnitudes arbitraires (résidus
+50-60, seuils absurdes) & \textbf{normaliser} + exprimer tout critère en
+\textbf{ratio au prior trivial} \\
+Statistiques à queue lourde & moyenne ≫ médiane ; un compteur de pas ne
+déclenche jamais & \textbf{borner + lisser (EMA)} avant de décider \\
+Slots naïfs & 21 \% --- les slots ne se spécialisent pas &
+\textbf{compétition explicite} (softmax sur les slots) + itération → 94
+\% \\
+Champ réceptif trop large & catégories « sales » & encodeur \textbf{1×1}
+(apparence locale) → catégories pures \\
+Batch-1 en ligne & ne converge pas sur entrées quasi-aléatoires &
+\textbf{mémoire de rejeu + mini-lot} (rester en ligne, gagner en
+stabilité) \\
+\end{longtable}
+}
+
+Chacun de ces échecs partage la même racine : \textbf{une grandeur qu'on
+croyait informative ne l'était pas}, faute de référence. Le diagnostic
+tient dans le fait de toujours disposer d'un \textbf{prior trivial}
+contre lequel se juger.
+
+\subsection{\texorpdfstring{2.4 Le grand échec de la phase : le
+\textbf{latent opaque} (§5bis) et sa
+correction}{2.4 Le grand échec de la phase : le latent opaque (§5bis) et sa correction}}\label{le-grand-uxe9chec-de-la-phase-le-latent-opaque-5bis-et-sa-correction}
+
+Toute la hiérarchie initiale (étapes 6→9) était bâtie sur le
+\textbf{latent compressé opaque} du module de vision. Les mesures ont
+fini par désigner ce maillon comme le \textbf{goulot d'étranglement du
+projet} :
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+représentation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+qualité de prédiction
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+latent compressé \textbf{opaque} (64) --- \emph{utilisé par la
+hiérarchie} & \textbf{57 \%} \\
+latent spatial (non compressant) & 80 \% \\
+représentation \textbf{objet} (slot-attention) & \textbf{94 \%} recons.
+/ \textbf{80 \%} préd. triviale \\
+\end{longtable}
+}
+
+Conséquence en cascade : des modules-régime qui prédisent mal ne voient
+leur erreur \textbf{que faiblement} dégradée par un changement de régime
+→ \textbf{la nouveauté devient indétectable}. C'est la cause profonde de
+l'échec de l'étape 9 : un \textbf{vent transverse} ne déclenchait
+\textbf{aucune naissance}, et pire, la \emph{familiarité montait} quand
+le vent se levait (cf.~enseignement \#11).
+
+\textbf{Correction (étape 10) --- travailler en espace-champ.} Les
+modules-régime prédisent désormais \textbf{champ(T-1) → champ(T)}
+directement. Le résidu devient le \textbf{rappel d'objets ∈ {[}0,1{]}} :
+\textbf{sans unité par construction}, sans normalisation ni ratio. Un
+vent en Y fait rater la prédiction (qui décale en X) → le rappel chute →
+la nouveauté est \textbf{immédiatement visible}.
+
+\textbf{Mesuré (étape 10)} : détection nette (\textbf{56-59 \%} sur le
+bon régime vs \textbf{20-27 \%} ailleurs), 3 régimes sur 3 couverts, et
+\textbf{vent transverse enfin détecté} (familiarité \textbf{59 → 28 \%},
+un module naît) --- ce que le latent opaque ne faisait jamais.
+
+\textbf{Leçon centrale.} Le bon espace de représentation n'est pas le
+plus compressé, c'est celui où \textbf{la mesure de surprise est
+fidèle}. Un rappel d'objets est scale-free ; un latent opaque ne l'est
+pas. La compression sert la reconstruction ; elle ne doit pas être
+imposée à la couche qui doit \textbf{détecter le changement}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{3. Partie II --- Régimes, hiérarchie,
+spécialisation}\label{partie-ii-ruxe9gimes-hiuxe9rarchie-spuxe9cialisation}
+
+\subsection{3.1 Un régime = une signature compressée
+récurrente}\label{un-ruxe9gime-une-signature-compressuxe9e-ruxe9currente}
+
+Un module-régime n'encode pas « la vitesse (1,0) » ; il encode
+\textbf{une manière dont le champ se transforme} qui revient assez
+souvent pour valoir un module. C'est plus générique qu'une étiquette de
+vitesse : un vent, un frottement, tout motif de transformation récurrent
+est éligible.
+
+\textbf{Mesuré (étape 6)} : 4 modules nés, \textbf{3/3 régimes
+couverts}, les niveaux N1 (champ) et N2 (identité de régime)
+\textbf{concordent}. \textbf{(étape 7)} : N3 apprend la règle
+\textbf{action → changement de régime} (l'accélération) avec exactitude
+\textbf{57 \% vs 38 \% trivial (+31 \%)}, et \textbf{(étape 8)} un
+horizon de prédiction \textbf{naturel à T+5} émerge de la courbe G(h)
+--- mesuré, pas choisi.
+
+\subsection{\texorpdfstring{3.2 Verrouillage asymétrique : condition
+\emph{nécessaire} de la
+spécialisation}{3.2 Verrouillage asymétrique : condition nécessaire de la spécialisation}}\label{verrouillage-asymuxe9trique-condition-nuxe9cessaire-de-la-spuxe9cialisation}
+
+Sans verrou, un module compétent \textbf{se ré-entraîne sur le régime
+suivant et oublie le sien} : couverture 2/3. Avec un verrou
+\textbf{asymétrique} (on fige le plancher de compétence, jamais un
+plafond), la spécialisation tient : \textbf{3/3}. C'est un résultat
+empirique fort : la mémoire longue d'un module vient d'un \textbf{arrêt
+d'apprentissage local}, pas d'une capacité plus grande.
+
+\subsection{\texorpdfstring{3.3 Naissance : surprise \textbf{confirmée}
++ \textbf{grâce} ; le problème de
+sur-création}{3.3 Naissance : surprise confirmée + grâce ; le problème de sur-création}}\label{naissance-surprise-confirmuxe9e-gruxe2ce-le-probluxe8me-de-sur-cruxe9ation}
+
+Créer sur le moindre incident donne \textbf{799 modules en 800 pas}.
+Deux garde-fous : - \textbf{surprise confirmée} (leaky-evidence / EMA) :
+un pic isolé ne suffit pas ; - \textbf{grâce} : un nouveau-né garde la
+main le temps d'apprendre, sinon on en crée un autre avant qu'il ait
+fini --- c'est la \textbf{sur-création}.
+
+Les modules conv champ→champ sont \textbf{lents} (\textasciitilde2000
+pas). Un \texttt{progress-gate} (« ne pas créer tant que le meilleur
+module progresse encore », §28.1) réduit la casse, mais un résidu de
+sur-création est resté (jusqu'à 5 modules pour 3 régimes). \textbf{Il
+sera résolu par l'auto-réglage} (§3.4 / étape 15).
+
+\subsection{3.4 Localiser l'échec dans la
+hiérarchie}\label{localiser-luxe9chec-dans-la-hiuxe9rarchie}
+
+La qualité d'un niveau \textbf{plafonne le niveau au-dessus}. À l'étape
+7, les erreurs de N3 se localisent \textbf{au niveau N2} : le
+vocabulaire de régimes confond v=(1,0) et v=(2,0) dans un même module.
+Règle (§29.4) : \textbf{diagnostiquer le niveau le plus bas anormal}
+avant de toucher au niveau supérieur. Corollaire méthodologique éprouvé
+(enseignement \#12) : vérifier qu'un stimulus « nouveau » l'est
+\textbf{vraiment} --- un vent (1,0) sur une vitesse (1,0) produit un
+déplacement (2,0) \emph{déjà appris} ; le système avait raison de le
+reconnaître, c'était l'expérience qui était mal conçue.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{4. Partie III ---
+L'orchestrateur}\label{partie-iii-lorchestrateur}
+
+L'orchestrateur ne calcule jamais lui-même : il \textbf{compose des
+modules en programmes}. Un programme enchaîne des \textbf{opérateurs
+typés} (\texttt{compresser\ :\ champ→latent},
+\texttt{generer\ :\ latent→champ},
+\texttt{predire\_champ\ :\ champ→champ},
+\texttt{predire\_latent\ :\ latent→latent}) et transforme un signal de
+départ en une \textbf{cible ancrée} (le vrai champ suivant). Le
+\textbf{typage} rend absurdes-impossibles la plupart des programmes : il
+élague l'espace de recherche \emph{avant} toute mesure.
+
+\subsection{4.1 Mode A --- recherche typée par la
+valeur}\label{mode-a-recherche-typuxe9e-par-la-valeur}
+
+Mode A énumère les programmes bien typés, \textbf{entraîne chacun},
+mesure son \textbf{gain de prédictibilité}
+\texttt{G\ =\ 1\ −\ résidu(module)/résidu(prior\ trivial)}, et retient
+le meilleur au sens \textbf{valeur = G − λ·coût} (le coût = somme des
+goulots mobilisés).
+
+\textbf{Mesuré (étape 11)} : sans aucune préférence câblée, Mode A
+\textbf{choisit \texttt{predire\_champ} (G = 64 \%)}, \textbf{rejette}
+la chaîne latent-opaque (36 \%) et la reconstruction pure (2 \%). Il
+\textbf{redécouvre §5bis tout seul} : le champ direct bat le latent
+opaque, par la mesure.
+
+\subsection{4.2 Mode B --- de l'imitation au renforcement
+(l'orchestrateur-LLM)}\label{mode-b-de-limitation-au-renforcement-lorchestrateur-llm}
+
+Mode B est l'orchestrateur \textbf{pensé comme un LLM à attention} : au
+lieu de \emph{chercher}, il \textbf{émet} un programme token par token,
+\textbf{conditionné par l'objectif}, sous \textbf{masque de type} (à
+chaque pas, seules les continuations bien typées sont émettables). Deux
+voies, toutes deux validées :
+
+\textbf{(a) Imitation (étape 13).} Mode B distille les programmes
+gagnants de Mode A. Résultat clé : le meilleur programme \textbf{dépend
+de l'objectif} --- prédire → \texttt{predire\_champ} ; reconstruire →
+\texttt{compresser\ →\ generer} --- et Mode B \textbf{émet le bon sans
+refaire la recherche}. Il \textbf{amortit} le coût de Mode A.
+
+\textbf{(b) Renforcement, sans professeur (étape 14).} À partir de la
+\textbf{seule récompense} \texttt{R\ =\ G\ −\ λ·coût}, init aléatoire,
+Mode B \textbf{découvre} les deux optima (2/2). Table de récompense
+mesurée :
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}lrr@{}}
+\toprule\noalign{}
+programme & R (prédiction) & R (reconstruction) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{predire\_champ} & \textbf{+0.459} & +0.161 \\
+\texttt{compresser\ →\ generer} & −0.080 & \textbf{+0.628} \\
+\texttt{predire\_champ\ →\ compresser\ →\ generer} & +0.304 & +0.073 \\
+\texttt{compresser\ →\ generer\ →\ predire\_champ} & +0.291 & +0.080 \\
+\texttt{compresser\ →\ predire\_latent\ →\ generer} & +0.103 & +0.095 \\
+\end{longtable}
+}
+
+Les objectifs \textbf{s'opposent} : \texttt{predire\_champ} est le
+meilleur en prédiction et quasi-pire en reconstruction ;
+\texttt{compresser\ →\ generer} l'inverse. La dépendance au contexte est
+réelle, et Mode B l'apprend.
+
+\textbf{L'échec, et l'évolution qui l'a résolu.} Le REINFORCE nu
+\textbf{échouait} sur la reconstruction : la politique \textbf{partagée}
+s'effondrait sur le programme le plus \textbf{court}
+(\texttt{predire\_champ}, un seul token, donc le plus facile à
+échantillonner) --- un \textbf{local-optimum honnête} de la
+reconstruction (R = +0.16) --- et \textbf{n'échantillonnait jamais} le
+vrai gagnant à 2 tokens (R = +0.63). L'avantage positif n'arrivait donc
+jamais. Correctif générique : \textbf{régularisation par entropie à
+recuit} --- on maintient l'exploration au début (l'entropie des
+distributions de pas est ajoutée à l'objectif), puis on laisse
+\textbf{exploiter} en fin. Avec elle : 2/2.
+
+\textbf{Leçon.} Une politique apprise sur récompense a un biais vers les
+programmes \textbf{courts} (faciles à tirer) ; sans pression
+d'exploration explicite, elle rate les compositions plus longues mais
+meilleures. L'entropie recuite est le pendant, côté orchestrateur, de la
+« grâce » côté modules : on protège l'exploration le temps qu'un
+candidat prometteur se révèle.
+
+\subsection{4.3 Mémoire épisodique \&
+nuit}\label{muxe9moire-uxe9pisodique-nuit}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Jour} : on ne mémorise que le \textbf{non-régénérable} --- la
+  \emph{graine} d'un épisode (champ initial + actions + modules actifs +
+  résidu), pas les images. On ne capture que le \textbf{surprenant}. Une
+  \textbf{hystérésis} obligatoire (entrer en surprise sous un seuil bas,
+  en sortir au-dessus d'un seuil haut) évite de \textbf{fragmenter} un
+  même épisode.
+\item
+  \textbf{Nuit} : on \textbf{rejoue} l'épisode et on entraîne un module
+  dédié jusqu'à le \textbf{prédire}. « Compris » = \emph{régénérable ET
+  prédit}, critère mesurable.
+\end{itemize}
+
+\textbf{Mesuré (étape 12)} : un vent capturé le jour (5 épisodes
+cohérents, familiarité \textasciitilde25 \%) est \textbf{entièrement
+compris la nuit} (rappel de rejeu au-dessus du seuil).
+
+\subsection{4.4 Auto-réglage réversible
+(§28.4)}\label{auto-ruxe9glage-ruxe9versible-28.4}
+
+Dernier maillon : la boucle qui règle les \textbf{hyperparamètres de
+l'orchestrateur sans intervention humaine}, de façon \textbf{réversible}
+--- on ne garde un changement que s'il améliore un \textbf{observable
+mesuré}, au-delà d'une marge (asymétrie : on ne court pas après le
+bruit) ; sinon on \textbf{revient en arrière}. Le cœur est
+\textbf{générique} (ni monde ni torch) : on lui injecte
+\texttt{appliquer(valeur)} et \texttt{mesurer()\ →\ score}.
+
+\textbf{Mesuré (étape 15)} --- branché sur \texttt{grace\_regime} contre
+le résidu de sur-création, à horizon \texttt{pas=3000} :
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}rrrr@{}}
+\toprule\noalign{}
+grâce & modules & couverture & observable (couv. − λ·superflus) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1000 & \textbf{9} & 52 \% & −0.09 \\
+2000 & 5 & 48 \% & +0.29 \\
+\textbf{4000} & \textbf{3} \emph{(= l'idéal)} & 44 \% & \textbf{+0.44}
+\emph{(gardé)} \\
+\end{longtable}
+}
+
+La boucle \textbf{résout la sur-création} (5 → 3 modules, un par régime)
+par la seule mesure, sans qu'on lui donne la valeur.
+
+\textbf{Insight (dette).} La grâce optimale \textbf{dépend de l'horizon
+d'entraînement} (1000 à \texttt{pas=1000}, 4000 à \texttt{pas=3000}) :
+une grâce exprimée en \textbf{pas absolus} est intrinsèquement liée à la
+durée. Le critère de naissance gagnerait à compter en \textbf{progrès}
+(déjà via \texttt{\_progresse}) plutôt qu'en pas fixes, ou à
+\textbf{indexer la grâce sur l'horizon}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{5. Partie IV --- Les principes chèrement acquis
+(transversaux)}\label{partie-iv-les-principes-chuxe8rement-acquis-transversaux}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Ne jamais conclure sur une perte scalaire.} Suivre le rappel
+  de la classe rare ; une perte basse peut cacher un effondrement.
+\item
+  \textbf{Toute décision se prend sur une grandeur scale-free.} Rappel ∈
+  {[}0,1{]}, gain contre un prior trivial, familiarité. Les magnitudes
+  brutes trompent.
+\item
+  \textbf{Le biais inductif prime sur la taille.} Convolution avant le
+  goulot ; 1×1 pour des catégories pures. Un balayage de capacité
+  \emph{diagnostique} le biais manquant.
+\item
+  \textbf{La compression sert la reconstruction, pas la détection.}
+  Détecter le changement demande un espace où la surprise est fidèle
+  (espace-champ), pas le plus compressé.
+\item
+  \textbf{Verrouillage asymétrique = mémoire.} La spécialisation vient
+  d'un arrêt d'apprentissage local, pas d'une capacité accrue.
+\item
+  \textbf{Créer sur surprise confirmée + grâce.} Protéger le nouveau-né
+  le temps qu'il apprenne ; sinon sur-création.
+\item
+  \textbf{Protéger l'exploration.} Côté orchestrateur, l'entropie
+  recuite empêche l'effondrement sur les solutions faciles ; c'est la «
+  grâce » des programmes.
+\item
+  \textbf{Rendre les réglages réversibles.} Aucun hyperparamètre n'est
+  sacré : on le garde s'il améliore un observable, sinon on revient.
+\item
+  \textbf{Diagnostiquer le niveau le plus bas anormal} avant de toucher
+  au-dessus.
+\item
+  \textbf{Vérifier qu'un stimulus nouveau l'est vraiment} avant
+  d'accuser le système.
+\end{enumerate}
+
+Ces dix principes sont exactement la \textbf{matière de
+l'auto-diagnostic} de l'orchestrateur (Architecture §28.3) : chaque
+symptôme a un signal objectif et un correctif générique.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{6. Ce qui reste ouvert (limites
+honnêtes)}\label{ce-qui-reste-ouvert-limites-honnuxeates}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Rappels conv modérés} (\textasciitilde44-59 \% en run court) :
+  modules sous-entraînés ; ce n'est pas un plafond de principe mais un
+  budget d'entraînement.
+\item
+  \textbf{Bascule mesurée A ↔ B} : \emph{quand} cesser de chercher (Mode
+  A) pour émettre (Mode B) --- décision méta non encore implémentée.
+\item
+  \textbf{Instrumentation} des nouveaux objets (programmes, épisodes,
+  réglages) dans le viewer.
+\item
+  \textbf{L'action n'est pas encore intégrée} au déroulé de
+  l'orchestrateur : c'est l'objet de la \textbf{phase suivante}
+  (objectifs faim/curiosité, arbre d'actions exponentiel, A* avec
+  g()/h() émergés, renforcement nocturne de plus en plus amont).
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{7. Table de synthèse --- étapes 1→15 (chiffres
+mesurés)}\label{table-de-synthuxe8se-uxe9tapes-115-chiffres-mesuruxe9s}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\#
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Capacité
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Résultat mesuré
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & Compresser \& reconstruire & goulot \textbf{64 \textless{} 100}, F1
+\textbf{90 \%} \\
+2a & Prédire T-1→T = sonde de vitesse & \textbf{84 \%} à la vitesse
+entraînée vs \textasciitilde20 \% ailleurs \\
+2b & Chaîne module→module & 80 \% (latent spatial) / \textbf{57 \%}
+(latent opaque) \\
+3 & Taille par MDL & choisit \textbf{dim 48} sur {[}8..96{]} \\
+4 & Attention/objets → prédiction triviale & recons. \textbf{94 \%},
+prédiction en décalant \textbf{80 \%} \\
+5 & Catégorisation émergente & \textbf{4 catégories} pures à 100 \%,
+aucune étiquette \\
+6 & Détection de vitesse & 4 modules, \textbf{3/3 régimes}, niveaux
+concordants \\
+7 & Règle action → régime (N3) & \textbf{57 \% vs 38 \%} trivial
+(\textbf{+31 \%}) \\
+8 & Horizons & horizon naturel \textbf{T+5} (mesuré) \\
+9 & Vent : localiser l'échec ⚠ & signature obtenue mais \textbf{aucune
+naissance} → corrigé en 10 \\
+10 & Régime en \textbf{espace-champ} (lève §5bis) & 56-59 \% vs 20-27
+\%, \textbf{vent détecté} (59→28 \%) \\
+11 & Orchestrateur \textbf{Mode A} & choisit \texttt{predire\_champ} (G
+64 \%), \textbf{redécouvre §5bis} \\
+12 & Boucle \textbf{jour→nuit} & vent capturé le jour, \textbf{compris
+la nuit} \\
+13 & \textbf{Mode B} imitation & émet le bon programme \textbf{par
+objectif}, sans recherche \\
+14 & \textbf{Mode B} renforcement & \textbf{découvre} les 2 optima (2/2)
+via entropie recuite \\
+15 & \textbf{Auto-réglage §28.4} & \texttt{grace=4000\ →\ 3\ modules} :
+\textbf{sur-création résolue} par la mesure \\
+\end{longtable}
+}
+
+\emph{Reproductible : chaque ligne a un harnais
+\texttt{python3\ -m\ scl.etapeN\_…} (voir \texttt{STATUS.md}).}
+\emph{Suite complète : 223 tests verts.}
+
+\end{document}
