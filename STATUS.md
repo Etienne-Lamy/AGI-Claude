@@ -101,7 +101,7 @@ Chaque étape a un harnais reproductible. Les chiffres sont mesurés, pas estim�
 > faut planifier sur l'**état compact objet** (positions issues de la slot-attention, étape 4),
 > pas sur les 100 pixels bruts. **C'est LA tâche de la prochaine session.**
 
-| 21 | **Curiosité anti-vol-rectiligne** | `etape21_curiosite.py` | `python3 -m scl.etape21_curiosite` | politique = action la MOINS bien prévue (incertitude max du modèle de transition) ; garde la diversité d'action et maîtrise toutes les actions « de proche en proche », vs l'exploitation qui se fige (voir résultat) |
+| 21 | **Curiosité anti-vol-rectiligne** | `etape21_curiosite.py` | `python3 -m scl.etape21_curiosite` | politique = action la MOINS bien prévue (incertitude max du modèle de transition). Curieuse : entropie **0.57**, **5/5 actions maîtrisées** « de proche en proche ». Exploitante (argmin) : entropie **0**, se fige sur 1 action, **1/5 maîtrisée** → la curiosité sort du figement |
 | 22 | **Placement maternel → VISÉE DU SUCRE ÉMERGE** ✅ | `maternage.py`, `etape22_maternage.py` | `python3 -m scl.etape22_maternage` | la « maman » pose l'agent à 2-3 cases d'un sucre et DÉMONTRE l'action vers lui (récompense dense) → Q apprend « sucre visible → aller vers lui ». Éval **gelée, monde FRAIS, sans placement** : sucre **58.8 vs 51.2 hasard (+15 %)** — **la visée du sucre GÉNÉRALISE** (là où le champ-brut seul échouait, étape 20). Contrepartie honnête : +8 bâtons (fonce, moins prudent) |
 
 Visualisation (viewer **v7**) — 2 commandes :

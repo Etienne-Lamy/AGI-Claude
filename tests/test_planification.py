@@ -2,7 +2,8 @@
 rejeu + mini-lot, et le choix glouton préfère l'action de meilleure récompense prédite."""
 import numpy as np
 
-from scl.planification import ModeleRecompense, choisir_glouton
+from scl.action import TransitionActionChamp
+from scl.planification import ModeleRecompense, choisir_glouton, choisir_curieux
 
 
 def _champ():
@@ -19,6 +20,14 @@ def test_apprend_a_ordonner_les_actions():
         m.observer(c, 0, -1.0)
     assert m.predire(c, 1) > m.predire(c, 0)             # a appris l'ordre
     assert choisir_glouton(m, c, 2, epsilon=0.0) == 1     # glouton → la bonne action
+
+
+def test_curiosite_vise_laction_la_moins_bien_prevue():
+    actions = [(0, 0), (1, 0)]
+    tac = TransitionActionChamp(actions)
+    tac.modules[(0, 0)].erreurs = [0.1] * 30          # bien prévue
+    tac.modules[(1, 0)].erreurs = [0.9] * 30          # mal prévue → curiosité doit la viser
+    assert choisir_curieux(tac, actions, epsilon=0.0) == 1
 
 
 def test_predire_et_observer_bornes():

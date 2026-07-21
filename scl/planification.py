@@ -65,6 +65,27 @@ def choisir_glouton(modele_r, champ, n_actions, epsilon=0.1):
     return int(np.argmax(scores))
 
 
+def incertitude_module(module, fenetre=30):
+    """Incertitude d'un module de transition = son erreur de prédiction récente moyenne.
+    Élevée = conséquence mal prévue (à explorer) ; jamais essayé = max (attrait de l'inconnu)."""
+    err = getattr(module, "erreurs", None)
+    if not err:
+        return 1.0
+    return float(np.mean(err[-fenetre:]))
+
+
+def choisir_curieux(tac, actions, epsilon=0.0):
+    """CURIOSITÉ (étape 21) : choisir l'action dont on prévoit le MOINS bien la conséquence
+    (incertitude max du modèle de transition action-conditionné). Quand plus rien ne
+    s'apprend en exploitant (vol rectiligne), c'est ce qui sort l'agent de sa zone de
+    confort : lister les actions, viser celle qu'on ne sait pas prévoir — puis la suivante,
+    de proche en proche, jusqu'à tout maîtriser."""
+    if random.random() < epsilon:
+        return random.randrange(len(actions))
+    inc = [incertitude_module(tac.modules[tuple(a)]) for a in actions]
+    return int(np.argmax(inc))
+
+
 class ModeleValeurQ(torch.nn.Module):
     """Q(champ, action) = g() + h() COMBINÉS (étape 19, §6) : la valeur d'agir, qui unit
     la récompense immédiate (g, le coût du pas) et la valeur du reste à faire (h, l'avenir).
