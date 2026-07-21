@@ -54,6 +54,8 @@ def main():
     p.add_argument("--pas", type=int, default=2500)
     args = p.parse_args()
     actions = ACCELERATIONS_PERMISES
+    import torch
+    torch.manual_seed(0)                          # reproductible
     print(f"Device : {DEVICE} — curiosité vs exploitation, {args.pas} pas")
 
     ec, incc, cptc = _run(+1, args.pas, graine=5)

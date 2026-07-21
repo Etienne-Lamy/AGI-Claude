@@ -73,7 +73,8 @@ def main():
     args = p.parse_args()
     print(f"Device : {DEVICE} — {args.lecons} leçons de placement maternel")
 
-    random.seed(0)
+    import torch
+    torch.manual_seed(0); random.seed(0)          # reproductible (mêmes chiffres à chaque run)
     rng = np.random.default_rng(0)
     q = ModeleValeurQ(n_actions=len(ACCELERATIONS_PERMISES), gamma=0.95)
     rej = RejeuNocturne(n_pas=args.max_pas)
