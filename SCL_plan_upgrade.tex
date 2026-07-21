@@ -1,0 +1,535 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  french,
+  11pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\ifLuaTeX
+\usepackage[bidi=basic,shorthands=off]{babel}
+\else
+\usepackage[bidi=default,shorthands=off]{babel}
+\fi
+\ifLuaTeX
+  \usepackage{selnolig} % disable illegal ligatures
+\fi
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={SCL --- Plan d'upgrade : perception objet{,} action‑accélération{,} orchestrateur à attention},
+  pdfauthor={Etienne Lamy},
+  pdflang={fr},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{SCL --- Plan d'upgrade : perception objet, action‑accélération,
+orchestrateur à attention}
+\author{Etienne Lamy}
+\date{2026-07-21}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+\begin{quote}
+\emph{Remise à niveau d'exigence. Ce qui précède n'est pas assez
+maîtrisé : prévoir T+1 est faible, les « branches » sont dégénérées,
+l'action a été confondue avec la vitesse, et l'entraînement
+A*→orchestrateur n'est pas câblé. Ce document dit comment on répare,
+avec la structure concrète (matrices, gradients, signaux faibles) de
+l'orchestrateur.} 2026‑07‑21. Auteur : Etienne Lamy. Fait suite à
+\texttt{SCL\_conception\_action.md}.
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{0. Diagnostic honnête (pourquoi on repart d'un cran plus
+bas)}\label{diagnostic-honnuxeate-pourquoi-on-repart-dun-cran-plus-bas}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Faiblesse constatée
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Preuve mesurée
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Cause racine
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Prévoir T+1 est \textbf{médiocre} & rappel 57 \% (latent opaque) à 84 \%
+(au mieux) & on prédit des \textbf{pixels bruts}, pas des
+\textbf{objets} ; goulot mal placé \\
+Les « branches » sont \textbf{dégénérées} & \texttt{(1,0)×10\ →\ (‑2,0)}
+figé, identique à \texttt{(0,0)×10} & l'action a été prise comme
+\textbf{vitesse soutenue}, pas comme \textbf{Δv} ; N3 fragile \\
+Pas d'\textbf{arbre} de possibilités & aucune (jamais construit sur des
+séquences variées) & manque un état compact où dérouler
+l'accélération \\
+\textbf{A* n'entraîne pas} l'orchestrateur & Mode B n'apprend que sur
+des programmes de PERCEPTION & pas de signal A*→politique câblé, pas de
+signaux faibles en entrée \\
+Réutilisation \textbf{compositionnelle} absente & \texttt{v=(2,0)} non
+exprimé comme \texttt{(1,0)∘(1,0)} & pas d'opérateur d'action paramétré
+ni de recherche qui la trouve \\
+Rien à \textbf{voir} & harnais d'action sans log viewer & log JSONL non
+émis \\
+\end{longtable}
+}
+
+\textbf{Fil conducteur du fix} : arrêter de raisonner en \textbf{pixels}
+et raisonner en \textbf{objets}. Un champ = un petit ensemble d'objets
+\texttt{(catégorie,\ position)}. Dès lors : prédire = \textbf{décaler
+les positions}, l'action = \textbf{changer la vitesse}, la recherche =
+\textbf{dérouler des accélérations} sur cet état minuscule, et la
+compositionnalité (\texttt{(2,0)=(1,0)∘(1,0)}) devient \textbf{native}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{1. Fondation --- perception OBJET (prédire T+1 doit devenir
+quasi‑exact)}\label{fondation-perception-objet-pruxe9dire-t1-doit-devenir-quasiexact}
+
+On a déjà les briques (slot‑attention étape 4 : 94 \% ; VQ catégories
+étape 5 : 100 \% pur). On les assemble en un \textbf{état‑objet} et on
+grossit les modèles autant qu'il faut.
+
+\textbf{Représentation.}
+\texttt{champ\ 10×10\ →\ E\ =\ \{(c\_k,\ p\_k,\ a\_k)\}} : pour chaque
+objet détecté, sa \textbf{catégorie} \texttt{c\_k} (émergente, VQ), sa
+\textbf{position} \texttt{p\_k=(x,y)} relative à l'agent, son
+\textbf{amplitude} \texttt{a\_k}. Nombre d'objets petit (≤
+\textasciitilde8 visibles). \textbf{Compression forte} :
+\textasciitilde8×(1+2+1)=32 nombres au lieu de 100 pixels, et surtout
+\textbf{sémantiques}.
+
+\textbf{Modules par catégorie (tu l'as autorisé).} Un \textbf{générateur
+par catégorie} (sucre, bâton, corps) :
+\texttt{g\_c(p)\ →\ empreinte\ de\ l\textquotesingle{}objet\ c\ à\ la\ position\ p}
+dans le champ. Le champ se \textbf{régénère} en sommant les empreintes.
+Ces générateurs peuvent être \textbf{gros} (qualité), seul le
+\textbf{goulot} (la liste \texttt{E}) compte pour la parcimonie (§5).
+Naissance d'un générateur sur \textbf{catégorie nouvelle} (surprise VQ),
+pas avant.
+
+\textbf{Prédiction T+1 = décalage (triviale et EXACTE).} \texttt{E(t+1)}
+: chaque \texttt{p\_k} devient \texttt{p\_k\ −\ v(t)} (le monde défile à
+l'opposé du mouvement de l'agent). Régénérer le champ depuis
+\texttt{E(t+1)}. \textbf{Cible de rappel : \textgreater{} 95 \%} à T+1,
+et \textbf{stable à T+h} tant que les objets restent visibles (plus
+d'erreur de décalage cumulée qu'un arrondi entier). \emph{C'est le test
+qui doit passer avant tout le reste.}
+
+\textbf{Détecteur de position.} Le maillon à muscler :
+\texttt{champ\ →\ positions}. Slot‑attention (étape 4) donne déjà des
+slots‑objets ; on ajoute une \textbf{tête de localisation} (argmax/
+barycentre softmax par slot) → \texttt{p\_k}. Entraînée par
+reconstruction (le champ régénéré depuis \texttt{E} doit égaler le champ
+vu) : gradient \textbf{auto‑supervisé}, aucune étiquette de position.
+
+\textbf{Livrable mesurable (étape 23)} : rappel T+1
+\textbf{\textgreater{} 95 \%}, T+5 \textbf{\textgreater{} 90 \%},
+compression \texttt{\textbar{}E\textbar{}\ ≪\ 100}, catégories
+émergentes pures. Log viewer : champ VU vs champ RÉGÉNÉRÉ‑depuis‑E, +
+les positions d'objets suivies.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{2. Action = ACCÉLÉRATION (Δv), pas vitesse --- et prévoir
+plusieurs
+positions}\label{action-accuxe9luxe9ration-ux3b4v-pas-vitesse-et-pruxe9voir-plusieurs-positions}
+
+\textbf{État dynamique} : \texttt{(E,\ v)} où \texttt{v} = vitesse
+propre (interne, ∈ ⟦−2,2⟧²). \textbf{Action} \texttt{a} =
+\textbf{accélération} ∈ \{(0,0),(±1,0),(0,±1)\} = un \textbf{changement}
+de vitesse.
+
+\textbf{Modèle de transition (compositionnel par construction) :}
+
+\begin{verbatim}
+v'  = clip(v + a, ±v_max)          # l'accélération met à jour la vitesse (petit module appris)
+p_k'= p_k − v'                       # UN opérateur « translater par v' », réutilisé pour tous les objets
+E'  = { (c_k, p_k', a_k) }
+\end{verbatim}
+
+Deux modules seulement :
+\textbf{\texttt{accel\ :\ (v,a)\ →\ v\textquotesingle{}}} (5→5, trivial,
+appris/vérifié étape D) et
+\textbf{\texttt{translater\ :\ (E,v\textquotesingle{})\ →\ E\textquotesingle{}}}
+(décalage). Prédire T+h sous une séquence \texttt{a\_1..a\_h} = itérer.
+
+\textbf{Compositionnalité NATIVE (ton test).} Aller à \texttt{v=(2,0)}
+depuis l'arrêt = \texttt{a=(1,0)} \textbf{deux fois} : \texttt{v:0→1→2},
+\texttt{translater} appliqué avec \texttt{v\textquotesingle{}=1} puis
+\texttt{v\textquotesingle{}=2}. Le \textbf{même} module
+\texttt{translater} sert à toutes les vitesses ; \texttt{v=(2,0)}
+\textbf{est} \texttt{(1,0)} enchaîné --- il n'existe pas de « module
+(2,0) » séparé, il \textbf{émerge} de la double application. C'est
+exactement « se rendre compte que \texttt{v=(2,0)} se simule par double
+usage du module \texttt{(1,0)} ». \textbf{Critère d'acceptation §31 :}
+la recherche/l'orchestrateur DOIT trouver que
+\texttt{translater∘translater} prédit l'outcome de \texttt{(2,0)} ---
+mesuré, pas supposé.
+
+\textbf{Livrable (étape 24)} : matrice de prédiction position sous
+\textbf{séquences d'actions variées} (plus de \texttt{(1,0)×10} figé) ;
+vérifier que \texttt{(1,0)} appliqué 2× = outcome réel de vitesse 2.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{3. Arbre de possibilités réel + recherche A* sur
+l'état‑objet}\label{arbre-de-possibilituxe9s-ruxe9el-recherche-a-sur-luxe9tatobjet}
+
+Sur \texttt{(E,v)} --- minuscule --- dérouler l'arbre des accélérations
+est \textbf{bon marché}.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Nœuds} = \texttt{(E,v)} prédits ; \textbf{arêtes} =
+  accélérations \texttt{a} (coût = temps/effort).
+\item
+  \textbf{But} = un sucre atteint (un \texttt{p\_k} de catégorie sucre
+  arrive sur le corps).
+\item
+  \textbf{g(n)} = coût cumulé ; \textbf{h(n)} = distance‑valeur au sucre
+  le plus proche \textbf{apprise} (\texttt{recherche.ValeurApprise}, TD)
+  --- au début 0 (Dijkstra borné, §7.3), puis informative.
+\item
+  \textbf{A*} (\texttt{recherche.a\_etoile}, déjà écrit) sur
+  \texttt{voisins\ =\ \{(translater(accel(v,a)),\ a)\}}. Budget borné ⇒
+  on \textbf{ouvre puis abandonne} des branches, on pousse \textbf{une}
+  action.
+\end{itemize}
+
+Comme on prévoit en \textbf{objets}, « voir » le sucre à 3‑4 actions et
+\textbf{prioriser} cette branche devient direct : l'arbre trouve la
+séquence qui amène un \texttt{p\_sucre} sur le corps, \texttt{h} la
+remonte. \textbf{La nuit}, budget large : on \textbf{balaie} les
+séquences depuis les épisodes stockés et on \textbf{s'aperçoit} qu'une
+autre suite d'accélérations aurait mangé le sucre → cible d'entraînement
+(valeur + politique). \emph{Mais tout cela suppose la fondation §1 :
+sans voir/prévoir le sucre, rien n'est possible --- d'où la priorité
+absolue à §1.}
+
+\textbf{Livrable (étape 25)} : depuis un état où un sucre est à 3‑4
+actions, A* \textbf{prioritise} la branche qui le mange (mesuré :
+longueur/qualité du plan, sucre atteint \textgreater{} hasard) ;
+branches \textbf{non dégénérées} (des séquences différentes donnent des
+futurs différents).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{4. Orchestrateur --- la STRUCTURE concrète (attention,
+matrices, gradients, signaux
+faibles)}\label{orchestrateur-la-structure-concruxe8te-attention-matrices-gradients-signaux-faibles}
+
+L'orchestrateur \textbf{ne calcule pas}, il \textbf{compose} : il lit un
+\textbf{ensemble de jetons} (un par module actif + jetons spéciaux) et
+\textbf{émet un programme} (suite de triplets). Il est déjà à
+\textasciitilde80 \% dans \texttt{attention.py} (Set Transformer +
+Pointer Network + REINFORCE) ; on ajoute les \textbf{signaux faibles en
+entrée} et le \textbf{signal A* en sortie}.
+
+\subsection{\texorpdfstring{4.1 Les jetons d'entrée \texttt{T\_t} (c'est
+là que vivent les signaux
+faibles)}{4.1 Les jetons d'entrée T\_t (c'est là que vivent les signaux faibles)}}\label{les-jetons-dentruxe9e-t_t-cest-luxe0-que-vivent-les-signaux-faibles}
+
+Un jeton par module actif \texttt{i}, vecteur \texttt{x\_i\ ∈\ ℝ\^{}d}
+(d≈64) :
+
+\begin{verbatim}
+x_i = LayerNorm( W_lat · z_i  +  τ(type_i)  +  W_sig · s_i )
+\end{verbatim}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{z\_i} : dernier \textbf{output/latent} du module (dim propre →
+  projeté par \texttt{W\_lat\ ∈\ ℝ\^{}\{d×·\}}) ;
+\item
+  \texttt{τ(type\_i)} : \textbf{embedding de type} appris (champ /
+  latent / etat / action) ∈ ℝ\^{}d ;
+\item
+  \texttt{s\_i} : \textbf{SIGNAUX FAIBLES} (ce que tu demandes), vecteur
+  concaténé puis projeté par \texttt{W\_sig\ ∈\ ℝ\^{}\{d×m\}} :
+  \texttt{s\_i\ =\ {[}\ activation\_i\ ,\ récence\_i\ ,\ condensateur\_reco\_i\ ,\ condensateur\_gen\_i\ ,\ \ \ \ \ \ \ \ \ \ π\_reco\_i\ ,\ π\_gen\_i\ ,\ incertitude\_i\ ,\ progrès\_i\ {]}}
+  (activation/récence = ce module a‑t‑il servi récemment ; condensateurs
+  = ses statistiques accumulées ; π = fiabilités prévision/génération
+  ∈{[}0,1{]} ; incertitude/progrès = qualité d'apprentissage).
+  \textbf{La politique apprend à pointer selon ces signaux} (ex. «
+  module peu fiable ici → ne pas l'utiliser »).
+\item
+  Jetons spéciaux ajoutés : \textbf{{[}NEW{]}} (créer un module),
+  \textbf{objectif} (embedding du besoin dominant, §17),
+  \textbf{trace\_\{t‑1\}} (le programme émis au pas précédent ---
+  déroulé continu).
+\end{itemize}
+
+Matrice d'entrée : \texttt{X\ ∈\ ℝ\^{}\{N×d\}} (N = \#modules actifs +
+spéciaux). \textbf{Aucun encodage positionnel} (invariance par
+permutation --- Set Transformer).
+
+\subsection{4.2 Encodeur --- Set Transformer (self‑attention
+multi‑tête)}\label{encodeur-set-transformer-selfattention-multituxeate}
+
+Par couche (h têtes, \texttt{d\_h=d/h}) :
+
+\begin{verbatim}
+Q = X W_Q ,  K = X W_K ,  V = X W_V           # W_Q,W_K,W_V ∈ ℝ^{d×d}
+A = softmax( Q Kᵀ / √d_h )                     # A ∈ ℝ^{N×N}, poids d'attention entre modules
+H = LayerNorm( X + (A V) W_O )                 # W_O ∈ ℝ^{d×d}
+H = LayerNorm( H + FFN(H) )                     # FFN : d→4d→d
+\end{verbatim}
+
+Sortie \texttt{H\ ∈\ ℝ\^{}\{N×d\}} : chaque module \textbf{contextualisé
+par les autres} (l'attention \texttt{A} dit quels modules comptent l'un
+pour l'autre). Empilable en L couches.
+
+\subsection{4.3 Décodeur --- Pointer Network (émettre un programme par
+POINTAGE)}\label{duxe9codeur-pointer-network-uxe9mettre-un-programme-par-pointage}
+
+État de décodage \texttt{q\_t\ ∈\ ℝ\^{}d} (GRU sur les triplets déjà
+émis + \texttt{H} agrégé). À chaque pas on émet un \textbf{triplet}
+\texttt{(source,\ opérateur,\ cible)} en \textbf{pointant} des indices
+de \texttt{H} (jamais un vocabulaire fixe) :
+
+\begin{verbatim}
+p_src(j)  = softmax_j( u_srcᵀ tanh( W_src [H_j ; q_t] ) )     # j sur les N jetons
+p_op      = softmax( E_op q_t )                               # E_op : table d'opérateurs apprise
+p_cib(j)  = softmax_j( u_cibᵀ tanh( W_cib [H_j ; q_t] ) )  ⊙  masque_type(op)   # -∞ si type incompatible
+\end{verbatim}
+
+\texttt{opérateurs} incluent désormais \textbf{\texttt{agir(a)}},
+\textbf{\texttt{translater}}, \textbf{\texttt{accel}},
+\texttt{compresser}, \texttt{generer}, \texttt{predire}, \texttt{id},
+\textbf{{[}EOF{]}}. Émission jusqu'à {[}EOF{]}. Le \textbf{masquage de
+type} rend les triplets absurdes impossibles (déjà
+\texttt{attention.masque\_compatibilite\_type}).
+
+\subsection{4.4 Comment A* ENTRAÎNE l'orchestrateur (le point qui
+manquait)}\label{comment-a-entrauxeene-lorchestrateur-le-point-qui-manquait}
+
+A* (Mode A, \texttt{recherche.a\_etoile}) est le \textbf{professeur} :
+sur l'état courant il \textbf{cherche} le meilleur programme \texttt{P*}
+et sa \textbf{valeur} \texttt{R*\ =\ G\ −\ λ·coût} (ou : atteint le but
+/ valeur \texttt{g+h}). On entraîne l'émetteur (Mode B) par \textbf{deux
+gradients}, \texttt{loss\ =\ L\_imit\ +\ β·L\_rl\ −\ η·H} :
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Imitation} (démarrage à froid) :
+  \texttt{L\_imit\ =\ −\ Σ\_t\ log\ p(triplet\_t\ =\ P*\_t)} (teacher
+  forcing sur les triplets de \texttt{P*}). Reproduit la recherche
+  \textbf{sans la refaire}.
+\item
+  \textbf{Renforcement} (dépasse le prof) : échantillonner
+  \texttt{P\ \textasciitilde{}\ π}, l'exécuter, mesurer \texttt{R} ;
+  \texttt{L\_rl\ =\ −\ (R\ −\ b)\ Σ\_t\ log\ p(triplet\_t)} , baseline
+  \texttt{b} = \textbf{regret de composition}
+  (\texttt{credit.regret\_composition}, déjà écrit) ou moyenne mobile.
+\item
+  \textbf{Entropie} \texttt{H} recuite (anti‑effondrement, éprouvé étape
+  14).
+\end{enumerate}
+
+\textbf{Gradients (locaux à l'orchestrateur).} \texttt{∂loss/∂θ} remonte
+: têtes de pointage (\texttt{u\_src,W\_src,E\_op,u\_cib,W\_cib}) → GRU
+décodeur → encodeur (\texttt{W\_Q,W\_K,W\_V,W\_O},FFN) → projections
+d'entrée (\texttt{W\_lat,\ τ,\ W\_sig}). \textbf{Adam}, lr≈1e‑3,
+clip‑norm (anti‑divergence des pointeurs, déjà en place). \textbf{Aucun
+gradient n'entre dans les modules} : ils apprennent \textbf{localement}
+; l' orchestrateur n'apprend qu'à les \textbf{composer} en lisant leurs
+signaux faibles. C'est la séparation §10.8 (ḡ\_orch distinct de ḡ\_i,
+\texttt{attention.AccumulateurOrchestrateur}).
+
+\textbf{Ce que ça donne concrètement pour ta compositionnalité} : parmi
+les programmes qu'A* évalue figure \texttt{translater∘translater} ; s'il
+prédit l'outcome de \texttt{v=(2,0)} mieux (ou aussi bien pour moins
+cher) qu'un module dédié, \textbf{A* le classe premier}, l'imitation
+l'apprend, et l'orchestrateur \textbf{émet \texttt{(1,0)} deux fois} au
+lieu d'inventer un module \texttt{(2,0)}. La réutilisation émerge
+\textbf{par la mesure}.
+
+\textbf{Livrable (étape 26)} : sur un état donné, l'orchestrateur émet
+le programme qu'A* juge meilleur (imitation) puis l'améliore (REINFORCE)
+; démontrer \texttt{(2,0)\ =\ (1,0)∘(1,0)} \textbf{choisi} par
+l'orchestrateur ; ablation montrant que \textbf{retirer les signaux
+faibles dégrade} le choix (preuve qu'ils servent).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{5. Nuit --- balayer les possibilités « on aurait pu manger le
+sucre
+»}\label{nuit-balayer-les-possibilituxe9s-on-aurait-pu-manger-le-sucre}
+
+Rejeu des épisodes (mémoire, étape 12/20) \textbf{en objets} : depuis
+\texttt{E(t0)} d'un épisode, dérouler plusieurs séquences
+d'accélérations (A* budget large) et \textbf{détecter} celles qui
+amènent un sucre sur le corps → cibles positives pour \textbf{\texttt{h}
+(valeur)} et pour la \textbf{politique} (l'orchestrateur apprend à
+émettre ces séquences). C'est le « de plus en plus amont » de l'étape
+20, mais \textbf{rendu possible} parce qu'en objets on \textbf{voit et
+prédit} le sucre.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{6. Viewer --- tout loguer, et VOIR
+l'agent}\label{viewer-tout-loguer-et-voir-lagent}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Log partout} : chaque harnais action/horizon prend
+  \texttt{-\/-log} et émet le vocabulaire viewer.
+\item
+  \textbf{Nouveau panneau « agent »} : champ VU + objets suivis
+  \texttt{(catégorie,\ position)} + \textbf{l'arbre A*} en cours
+  (branches ouvertes/abandonnées) + l'action poussée + les pulsions. On
+  \textbf{voit} l'agent viser le sucre et délibérer.
+\item
+  \textbf{Panneau orchestrateur} : la matrice d'attention \texttt{A}
+  (quels modules s'écoutent), les signaux faibles par module, le
+  programme émis.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{7. Séquencement (chaque étape mesurable, commit + STATUS +
+tests)}\label{suxe9quencement-chaque-uxe9tape-mesurable-commit-status-tests}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\#
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Livrable
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Critère de réussite
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Dépend de
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{23} & Perception \textbf{objet} + prédiction par décalage &
+rappel \textbf{T+1 \textgreater{} 95 \%}, T+5 \textgreater{} 90 \%,
+\texttt{\textbar{}E\textbar{}≪100}, catégories pures & slot(4)+VQ(5) \\
+\textbf{24} & Action = \textbf{accélération}, transition
+\texttt{(E,v,a)→(E\textquotesingle{},v\textquotesingle{})} & prédiction
+sous séquences variées ; \textbf{\texttt{(1,0)²}=outcome \texttt{(2,0)}}
+& 23 \\
+\textbf{25} & \textbf{Arbre A*} sur l'état‑objet & depuis 3‑4 actions,
+\textbf{prioritise} la branche‑sucre ; branches non dégénérées & 24 \\
+\textbf{26} & \textbf{Orchestrateur} à attention + signaux faibles,
+\textbf{entraîné par A*} & émet le programme d'A* (imit.+RL) ;
+\textbf{choisit \texttt{(1,0)∘(1,0)}} ; ablation signaux faibles & 25,
+\texttt{attention.py} \\
+\textbf{27} & \textbf{Nuit} : balayage → « on aurait pu manger » & la
+visée du sucre s'améliore de nuit en nuit (monde frais gelé) & 25, 26 \\
+\textbf{28} & \textbf{Viewer} agent + arbre + attention & on voit
+l'agent viser, l'arbre s'ouvrir, la matrice d'attention & tous \\
+\end{longtable}
+}
+
+\textbf{Priorité absolue : étape 23.} Tant que « voir et prévoir T+1 »
+n'est pas quasi‑exact, tout le reste est bâti sur du sable --- c'est ton
+point, et il commande l'ordre.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{8. Ce qu'on garde / jette du code
+actuel}\label{ce-quon-garde-jette-du-code-actuel}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{On garde} : \texttt{module\_attention.py} (slots),
+  \texttt{classification\_emergente.py} (VQ), \texttt{attention.py} (Set
+  Transformer + Pointer + REINFORCE --- on l'active enfin pour
+  l'action), \texttt{recherche.py} (A* + ValeurApprise),
+  \texttt{curiosite.py}, \texttt{pulsions.py}, \texttt{credit.py},
+  \texttt{nuit\_*}.
+\item
+  \textbf{On refond} : \texttt{action.py}/\texttt{planification.py} (Q
+  sur pixels bruts → \textbf{valeur/politique sur état‑objet} ; action =
+  \textbf{accélération}) ; \texttt{regime.py} reste utile comme
+  détecteur mais n'est plus la voie de prédiction du champ.
+\item
+  \textbf{On abandonne} comme voie principale : la prédiction
+  \textbf{pixel‑brut} multi‑pas (gardée seulement comme \textbf{ancre de
+  vérité} ponctuelle, §7.4).
+\end{itemize}
+
+\end{document}
