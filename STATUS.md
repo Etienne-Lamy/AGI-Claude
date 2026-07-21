@@ -84,6 +84,7 @@ Chaque étape a un harnais reproductible. Les chiffres sont mesurés, pas estim�
 | 13 | **Orchestrateur Mode B** (LLM+attention, distillation de A) | `mode_b.py` | `python3 -m scl.etape13_mode_b` | émetteur typé autorégressif, apprend par imitation ; émet le bon programme PAR OBJECTIF sans recherche (voir §7bis) |
 | 14 | **Mode B par RENFORCEMENT** (découverte sans professeur) | `mode_b.py` | `python3 -m scl.etape14_reinforce` | depuis R=G−λ·coût seule, init aléatoire : **découvre les 2 optima** (2/2) grâce à l'entropie recuite ; objectifs opposés dans la table de récompense (voir §7bis) |
 | 15 | **Auto-réglage §28.4 branché** (réversible, sur un vrai levier) | `autoreglage.py` | `python3 -m scl.etape15_autoreglage --pas_regime 3000` | règle `grace_regime` par la SEULE mesure : 1000→**9 modules** (obs −0.09), 2000→5 (obs +0.29), **4000→3 = l'idéal** (obs +0.44, gardé) → **corrige la sur-création** (résidu étapes 10/6) sans valeur donnée à la main |
+| 16 | **Conséquence d'une ACTION sur le champ prévisible** (phase action) | `action.py` | `python3 -m scl.etape16_action_champ` | un module champ→champ par action (copie d'efférence) ; effet SOUTENU (vitesse saturée) → matrice **diagonale 57 % vs 31 %** (+26 %). Leçon : l'effet d'UN pas (vitesse remise à 0) est trop faible/proche (matrice plate ~50 %) → mesurer l'effet soutenu, ce que la navigation exploite |
 
 Visualisation (viewer **v7**) — 2 commandes :
 ```bash
