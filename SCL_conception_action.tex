@@ -1,0 +1,636 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  french,
+  11pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\ifLuaTeX
+\usepackage[bidi=basic,shorthands=off]{babel}
+\else
+\usepackage[bidi=default,shorthands=off]{babel}
+\fi
+\ifLuaTeX
+  \usepackage{selnolig} % disable illegal ligatures
+\fi
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={SCL --- Conception : intégrer l'action dans l'orchestrateur},
+  pdfauthor={Etienne Lamy},
+  pdflang={fr},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{SCL --- Conception : intégrer l'action dans l'orchestrateur}
+\author{Etienne Lamy}
+\date{2026-07-21}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+\begin{quote}
+\emph{Comment l'action entre dans l'orchestrateur-LLM : objectifs,
+déroulé continu, planification A* à g()/h() émergés, renforcement
+nocturne de plus en plus amont.} Document de conception (précède
+l'implémentation), versionné \texttt{.md}/\texttt{.tex}/\texttt{.pdf}.
+2026-07-21. Auteur : Etienne Lamy. Fait suite à
+\texttt{SCL\_bilan\_modules\_orchestrateur.md}.
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{0. Thèse}\label{thuxe8se}
+
+Jusqu'ici l'orchestrateur composait des programmes de
+\textbf{perception} (compresser, générer, prédire un champ) vers une
+cible ancrée. \textbf{L'action est le même problème, avec un opérateur
+de plus} : \texttt{agir(a)} fait avancer le monde d'un pas et rend le
+futur \emph{prévisible} --- pourvu qu'un module ait appris la
+conséquence de \texttt{a}. La difficulté propre à l'action n'est pas la
+prédiction (elle émerge comme le reste) mais \textbf{l'explosion
+combinatoire} de l'arbre des actions (comme aux échecs). On la maîtrise
+par trois leviers, tous déjà amorcés dans le code :
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  une \textbf{mécanique d'objectifs} qui, à chaque instant, désigne
+  \emph{ce vers quoi} chercher (donc élague brutalement l'arbre) ;
+\item
+  une \textbf{planification A*} dont \texttt{g()} (coût déjà payé) et
+  \texttt{h()} (reste à faire) sont \textbf{des sorties de modules
+  émergés}, évaluée \textbf{au plus haut niveau d'abstraction
+  disponible} (chercher sur des états compacts, pas sur le champ brut) ;
+\item
+  un \textbf{renforcement nocturne} qui propage le crédit \textbf{de
+  plus en plus en amont} : on mange d'abord un sucre par hasard, la nuit
+  apprend à s'en approcher à 1 pas, puis 2, \ldots{} jusqu'à 6-15 pas
+  --- l'horizon dont ce monde a besoin pour naviguer.
+\end{enumerate}
+
+Le tout tient dans un \textbf{déroulé continu} : l'orchestrateur « parle
+» sans cesse (il émet des actions et des prédictions de pensée), prend
+les entrées réelles au moins une fois, puis toutes les X étapes
+\emph{imaginées} pousse l'action retenue, passe à T+1 et réinjecte les
+vraies entrées. C'est le design proposé par l'auteur ; ce document le
+formalise et le raccorde à l'existant.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{1. Le problème}\label{le-probluxe8me}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{L'arbre d'actions est exponentiel.} 5 accélérations, un
+  horizon de navigation de 6-15 pas → 5⁶ à 5¹⁵ feuilles. Impossible à
+  dérouler en entier ; il faut \textbf{chercher avec une direction}
+  (objectif) et \textbf{une heuristique} (h).
+\item
+  \textbf{Prévoir en champ brut est cher.} Dérouler 10 pas de champ
+  10×10 sous chaque action coûte 10×5\^{}k passes conv. Prévoir sur un
+  \textbf{état compact} (p.~ex. « vecteur vers le sucre le plus proche
+  », ou le latent d'un module de régime) est bien moins cher et
+  \textbf{suffit à décider}. Il faut \emph{encourager} la recherche à se
+  placer haut dans le graphe de modules.
+\item
+  \textbf{La récompense est rare et tardive.} Manger un sucre est un
+  événement ponctuel ; sa cause utile (« j'ai accéléré vers lui il y a 8
+  pas ») est loin en amont. Sans propagation de crédit, l'agent ne relie
+  jamais l'action lointaine à la récompense.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{2. Ce qui existe déjà (inventaire --- ne pas
+réinventer)}\label{ce-qui-existe-duxe9juxe0-inventaire-ne-pas-ruxe9inventer}
+
+L'intégration est surtout un \textbf{assemblage}. Briques présentes et
+réutilisables :
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Besoin de la conception
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Brique existante
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+État
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Espace d'action, faim/douleur & \texttt{monde.py} (5 accél.,
+sucre/bâton, collisions) & prouvé \\
+A* + heuristique apprise h() & \texttt{recherche.a\_etoile},
+\texttt{ValeurApprise}, \texttt{entrainer\_v\_psi} (TD) & prouvé
+(générique) \\
+A* ancrée (g/h via points de vérité, confiance ∝ profondeur) &
+\texttt{recherche.a\_etoile\_ancree} & présent \\
+Curiosité / progrès / maîtrise / frontière & \texttt{curiosite.py} &
+prouvé \\
+Besoin dominant (argmax+hystérésis), réflexe douleur &
+\texttt{decision\_action.py} & prouvé \\
+Prédicteurs action-conditionnés (v→v'), naissance sur surprise &
+\texttt{dynamique.py} & prouvé \\
+Rejeu contrefactuel nocturne, regret de composition & \texttt{credit.py}
+& présent \\
+Orchestrateur-LLM à triplets, \textbf{déroulé continu}, action typée,
+REINFORCE & \texttt{attention.py} (Set Transformer + Pointer Net,
+\texttt{trace\_autoreferentielle}, \texttt{macro\_pas}) & présent \\
+Émetteur de programmes typé conditionné par objectif (Mode B) &
+\texttt{mode\_b.py} & \textbf{prouvé (étapes 13-14)} \\
+Recherche typée par valeur G−λ·coût (Mode A) & \texttt{orchestrateur.py}
+& \textbf{prouvé (étape 11)} \\
+Prédicteur de régime champ→champ (dynamique du monde) &
+\texttt{regime.py} & \textbf{prouvé (étape 10)} \\
+\end{longtable}
+}
+
+\textbf{Deux orchestrateurs coexistent} : le \textbf{cœur-étapes}
+(\texttt{orchestrateur.py}/\texttt{mode\_b.py}, testé, minimal, sans
+action) et l'\textbf{orchestrateur-LLM v6}
+(\texttt{attention.py}/\texttt{boucle.py}, riche, avec
+action/A*/curiosité, moins couvert par les tests). La conception
+\textbf{étend le cœur-étapes} (discipline de test, une étape mesurable à
+la fois) en \textbf{récoltant les algorithmes} de la v6 (A*, curiosité,
+crédit, besoins). La v6 \texttt{attention.py} reste la cible d'un
+substrat LLM complet qui pourra, plus tard, remplacer l'émetteur GRU de
+Mode B sans changer les interfaces.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{3. Principe directeur : l'action, un opérateur typé de
+plus}\label{principe-directeur-laction-un-opuxe9rateur-typuxe9-de-plus}
+
+Le langage typé de l'orchestrateur (étape 11) a des types
+\texttt{champ}, \texttt{latent} et les opérateurs
+\texttt{compresser/generer/predire\_champ/predire\_latent}. On
+\textbf{ajoute} :
+
+\begin{itemize}
+\tightlist
+\item
+  un type \texttt{etat} (état compact du monde utile à la décision :
+  latent de régime, ou vecteur d'objectif appris --- voir §6) et un type
+  \texttt{action} (élément de 𝒜) ;
+\item
+  l'opérateur \textbf{\texttt{agir\ :\ (etat,\ action)\ →\ etat}} --- le
+  \textbf{modèle de transition action-conditionné}. C'est LE nouveau
+  module : il \emph{rend le futur interprétable}, comme quand « décider
+  de prendre un verre » n'énumère pas les positions des doigts mais
+  s'appuie sur un générateur qui sait à quoi ressemble « après ».
+\item
+  l'opérateur
+  \textbf{\texttt{predire\_champ\_sous\_action\ :\ (champ,\ action)\ →\ champ}}
+  --- la version bas-niveau (rollout en champ brut), coûteuse, gardée
+  comme \textbf{point d'ancrage vérifiable} (§7.4 : on peut toujours
+  redescendre au champ pour vérifier une prédiction d'état).
+\end{itemize}
+
+Un module \texttt{agir} naît \textbf{exactement} comme les autres : sur
+\textbf{surprise confirmée} (agir révèle une conséquence qu'aucun module
+ne prédit) + \textbf{grâce}, puis il est entraîné jusqu'à la maîtrise et
+\textbf{verrouillé} (§1.4). \texttt{dynamique.py} fait déjà cela pour
+v→v' ; on généralise à \texttt{etat→etat}.
+
+\textbf{Conséquence structurante} : dès qu'un module \texttt{agir}
+existe, l'orchestrateur dispose, sur son état compact, d'une
+\textbf{fonction de transition} --- donc d'un \textbf{arbre de
+prévisions} qu'il peut dérouler \emph{sans toucher au monde}. C'est là
+que vit la planification.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{4. La mécanique d'objectifs (le
+moteur)}\label{la-muxe9canique-dobjectifs-le-moteur}
+
+Un \textbf{vecteur de pulsions}, chacune un scalaire mesurable, sans
+mélange continu entre elles (§15.3 : un seul besoin \emph{dominant}
+gouverne l'action, par argmax + hystérésis ---
+\texttt{decision\_action.priorisation\_besoin\_dominant}) :
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+pulsion
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+signal (mesuré)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+rôle
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{faim} & monte avec le temps, chute sur sucre (\texttt{monde}) &
+pulsion de corps ; oriente vers le sucre \\
+\textbf{douleur} & pic sur bâton ; \textbf{réflexe câblé non atrophié}
+(\texttt{reflexe\_cable}) & garde-fou, court-circuite tout \\
+\textbf{curiosité} & incertitude prédictive haute
+(\texttt{curiosite.incertitude}) & va vers les zones mal prédites
+(découvrir) \\
+\textbf{apprentissage} & progrès d'apprentissage \textgreater{} 0
+(\texttt{progres\_apprentissage}) & « jouer » : progresser sur une tâche
+déjà entamée \\
+\textbf{bullage} & un module \textbf{maîtrisé} couvre la situation
+(\texttt{maitrise}) & agir en pilote automatique → libérer du calcul
+pour la \textbf{prévision long terme} \\
+\textbf{temps perdu} & pas sans gain (ni pulsion réduite, ni progrès) &
+récompense \textbf{négative faible à long horizon} ---
+anti-tergiversation \\
+\end{longtable}
+}
+
+Points de conception :
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Sélection discrète, pas de pot-commun.} Le besoin dominant
+  \texttt{k\_t} sélectionne l'\textbf{objectif} qui \emph{conditionne}
+  l'émetteur (Mode B émet déjà conditionné par l'objectif : on élargit
+  le jeu d'objectifs de \{prédire, reconstruire\} à \{réduire faim,
+  éviter douleur, réduire incertitude, progresser, consolider\}).
+  L'hystérésis évite le papillonnage (déjà éprouvé sur les épisodes,
+  étape 12).
+\item
+  \textbf{Bullage = profondeur, pas inaction.} Agir sous un module
+  \emph{maîtrisé} coûte \textasciitilde0 en calcul (prédiction fiable,
+  peu de branches à explorer). Le \textbf{budget de calcul} ainsi libéré
+  finance un \textbf{horizon de prévision plus long} (ou une
+  consolidation type-nuit). C'est littéralement « faire sans effort ce
+  qu'on maîtrise pour penser à autre chose ».
+\item
+  \textbf{Temps perdu} = un terme de récompense
+  \texttt{r\_temps\ \textless{}\ 0} par pas, \textbf{dominé} par tout
+  vrai gain, mais \textbf{décisif quand rien d'autre ne bouge} : il
+  pousse à agir plutôt qu'à tergiverser, à un horizon assez long pour ne
+  pas être myope.
+\end{itemize}
+
+La récompense qui alimente la planification et le renforcement est donc
+: \texttt{r\_t\ =\ Δfaim⁻\ +\ Δdouleur⁻\ +\ r\_progrès\ +\ r\_temps},
+chaque terme mesuré, aucun câblé à la géométrie du monde (aucune
+coordonnée d'objet dans la voie de décision --- dette §27 tenue).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{5. Le déroulé continu (« le LLM parle en continu
+»)}\label{le-duxe9rouluxe9-continu-le-llm-parle-en-continu}
+
+Design retenu (celui de l'auteur, formalisé) --- une boucle de type
+\emph{model-predictive control} :
+
+\begin{verbatim}
+état réel s_t  ←  perception du monde (au moins une fois)
+répéter:
+    # PENSÉE (imaginée, sans toucher au monde) : l'orchestrateur "parle"
+    pour X étapes calculées:
+        l'orchestrateur émet un pas : soit un triplet de perception (interpréter s),
+        soit une action imaginée a → s' = agir(s, a)   # déroulé de l'arbre
+        (plusieurs pistes explorées PUIS abandonnées — cf. §6)
+    # ACTE : on pousse UNE action réelle (la racine du meilleur plan)
+    a* = première action du meilleur plan trouvé
+    monde ← appliquer_action(a*) ;  s_{t+1} ← perception réelle
+    pousser s_{t+1} dans le contexte  ;  t ← t+1
+\end{verbatim}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Un seul flux, continu.} Perception et action sont des jetons
+  du même déroulé (\texttt{attention.macro\_pas} +
+  \texttt{trace\_autoreferentielle} réinjectent la sortie passée : le
+  mécanisme existe). « Toutes les X étapes calculées, on passe à T+1 » =
+  X pas \emph{imaginés} entre deux pas \emph{réels}.
+\item
+  \textbf{Fenêtre temporelle} = l'horizon imaginé X (démarre à
+  \textasciitilde T+5, l'horizon \emph{naturel} mesuré étape 8, et
+  \textbf{s'étend} quand le bullage libère du calcul). \textbf{Fenêtre
+  dimensionnelle} = le nombre d'éléments pointables dans T\_t (modules
+  actifs + {[}NEW{]} + trace) ; elle grandit mécaniquement à chaque
+  module né (§8).
+\item
+  \textbf{Explorer puis abandonner.} À chaque action testée,
+  l'orchestrateur peut développer plusieurs sous-arbres et n'en
+  \textbf{retenir qu'un} (la racine poussée en sortie). C'est le rôle de
+  A* : ouvrir les branches prometteuses, fermer les autres (budget
+  borné, \texttt{a\_etoile(budget\_max=…)}).
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{6. Planification A* à g()/h()
+émergés}\label{planification-a-uxe0-gh-uxe9merguxe9s}
+
+L'arbre : \textbf{nœuds = états prédits} \texttt{s} (au niveau
+d'abstraction choisi), \textbf{arêtes = actions} \texttt{a} (coût
+d'arête = effort/temps).
+\texttt{voisins(s)\ =\ {[}(agir(s,a),\ coût(a))\ pour\ a\ ∈\ 𝒜{]}}. On
+réutilise \texttt{recherche.a\_etoile} tel quel.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{g(s)} = coût cumulé réel-ou-imaginé pour atteindre \texttt{s}
+  (somme des \texttt{−r\_t} le long du chemin). C'est une \textbf{sortie
+  de module} : le modèle de récompense/coût appris (Δfaim, douleur,
+  temps). L'auteur : « un module qui va lui donner le g() et h() ».
+\item
+  \textbf{h(s)} = estimation apprise du \textbf{reste à faire} jusqu'à
+  l'objectif = \texttt{ValeurApprise} (\texttt{recherche.v\_psi}),
+  entraînée par \textbf{TD} (\texttt{entrainer\_v\_psi}) --- d'abord ≡0
+  (A* dégénère en Dijkstra borné, comportement sanctionné §7.3), puis
+  informative à mesure que les nuits la façonnent (§7).
+\item
+  \textbf{Niveau d'abstraction = levier de coût.} Le \textbf{même} A*
+  peut dérouler sur le champ brut
+  (\texttt{predire\_champ\_sous\_action}, cher, exact) ou sur un
+  \textbf{état compact} (\texttt{agir} sur un latent, bon marché). On
+  \textbf{encourage le haut du graphe} par le terme de coût déjà au cœur
+  de l'orchestrateur :
+  \texttt{valeur\ =\ progrès\_objectif\ −\ λ·coût\_calcul}. Prévoir en
+  compact a un \texttt{coût\_calcul} moindre → à progrès égal,
+  l'orchestrateur préfère planifier haut. Si le compact devient non
+  fiable (l'ancre au champ le révèle, \texttt{a\_etoile\_ancree}), il
+  \textbf{redescend}.
+\item
+  \textbf{Émergence du bon état.} L'état sur lequel planifier n'est pas
+  donné : c'est le latent d'un module qui \textbf{réduit l'incertitude
+  sur l'objectif}. Concrètement, le module qui rend \texttt{h()}
+  \emph{apprenable} (faible erreur TD) est celui dont le latent
+  \textbf{sépare bien} les états « proche du but » des autres. On le
+  sélectionne comme tout module : par la mesure (erreur TD de \texttt{h}
+  = observable ; §28.4 peut régler le choix).
+\end{itemize}
+
+\textbf{Jour comme nuit.} Le jour, A* tourne sous \textbf{budget serré}
+(temps réel) : peu de branches, on exploite h. La nuit, \textbf{budget
+large} : on déroule plus de possibilités, on \textbf{réarrange les
+modules} (essayer \texttt{agir} sur d'autres états), on met à jour h et
+g hors ligne --- exactement « l'action nocturne explore plus avant les
+actions qu'on aurait pu faire, y compris arranger des modules
+différemment ».
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{7. Renforcement nocturne « de plus en plus amont
+»}\label{renforcement-nocturne-de-plus-en-plus-amont}
+
+C'est le cœur de l'apprentissage de navigation, et il \textbf{doit} être
+nocturne (crédit tardif). Récit et mécanisme :
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Jour} : l'agent, mû par la curiosité/faim, bouge ; par hasard
+  il \textbf{percute un sucre}. L'épisode (graine : champ initial +
+  actions + modules actifs + résidu) est capturé (mémoire épisodique,
+  étape 12) --- c'est un imprévu \textbf{récompensé}.
+\item
+  \textbf{Nuit} : on \textbf{rejoue} l'épisode et on fait un
+  \textbf{backup TD à n pas} (ou TD(λ)) sur \texttt{h} : la valeur de
+  l'état \textbf{juste avant} le sucre monte (crédit à 1 pas). Au rejeu
+  suivant, l'état \textbf{2 pas avant} hérite d'une partie de cette
+  valeur (γ), etc. Nuit après nuit, le crédit \textbf{remonte le fil} :
+  1 → 2 → \ldots{} → 6-15 pas.
+  \texttt{credit.rejeu\_contrefactuel\_nocturne} fournit la
+  \textbf{baseline non biaisée} (ce qu'auraient donné les actions non
+  prises), à poids figés.
+\item
+  \textbf{Résultat mesurable} : la \textbf{profondeur amont} à laquelle
+  l'agent oriente correctement son action vers le sucre \textbf{croît
+  avec le nombre de nuits}. C'est la courbe de validation de l'étape 20
+  (voir §10), l'analogue de la courbe G(h) de l'étape 8.
+\end{enumerate}
+
+Le \textbf{modèle \texttt{agir}} est ce qui rend ce rejeu possible sans
+le monde : la nuit \textbf{imagine} les approches (dérouler
+\texttt{agir} depuis l'état initial de l'épisode vers le sucre) et
+évalue des variantes --- impossible sans générateur de transition.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{8. Exploiter tout ce qu'un nouveau module
+apporte}\label{exploiter-tout-ce-quun-nouveau-module-apporte}
+
+À chaque naissance, l'orchestrateur reçoit (et \textbf{doit} utiliser
+pour s'entraîner) :
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{le nouvel output} → un \textbf{élément pointable} de plus dans
+  T\_t (fenêtre dimensionnelle ↑) : \texttt{attention.construire\_T\_t}
+  l'ajoute déjà ; il faut \textbf{amorcer} son embedding pour que
+  l'attention le retrouve (\texttt{credit.amorcage\_creation}, déjà
+  écrit).
+\item
+  \textbf{le générateur} → rend un futur \textbf{imaginable} sous ce
+  module → nouvelle arête possible dans l'arbre A* (\texttt{agir} peut
+  s'appliquer à son latent).
+\item
+  \textbf{l'état du condensateur} (statistiques du module) et \textbf{la
+  qualité d'apprentissage} (incertitude, progrès) → \textbf{pondèrent la
+  confiance} en rollout (\texttt{a\_etoile\_ancree} : confiance ∝
+  profondeur ; on la module aussi par la qualité du module) et
+  \textbf{gate} son usage (un module immature n'est pas déroulé
+  profond).
+\item
+  \textbf{le contexte où il fonctionne} →
+  \texttt{fiabilite\_contextuelle} (déjà dans \texttt{attention}) :
+  n'activer le module que là où il est fiable (activation creuse,
+  §10.7).
+\end{itemize}
+
+Autrement dit : \textbf{une naissance enrichit à la fois l'état,
+l'arbre, l'heuristique et le budget} de l'orchestrateur. Ne pas recâbler
+tout cela serait gâcher l'information --- c'est l'exigence explicite de
+l'auteur.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{9. Alternatives
+considérées}\label{alternatives-considuxe9ruxe9es}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{(A) RL sans modèle} (REINFORCE direct sur les actions, à la
+  Mode B actuel mais avec 𝒜 en sortie). \emph{Rejeté comme socle} :
+  ignore le modèle de transition émergé, ne planifie pas, et sur
+  récompense rare converge très lentement. \textbf{Gardé comme
+  composant} : la politique de Mode B fournit un \textbf{prior d'action}
+  (quel \texttt{a} essayer en premier dans A*), ce qui guide la
+  recherche --- c'est le meilleur des deux mondes (plan + politique
+  amortie).
+\item
+  \textbf{(B) Tout \texttt{attention.py} d'emblée} (Set Transformer +
+  Pointer Net comme orchestrateur d'action complet). \emph{Puissant mais
+  différé} : difficile à tester incrémentalement. On \textbf{récolte}
+  ses mécanismes (triplets, trace, REINFORCE, macro-pas) au fur et à
+  mesure.
+\item
+  \textbf{(C) Retenu : opérateur \texttt{agir} typé + modèle de
+  transition émergé + A* à g/h appris + déroulé continu + crédit
+  nocturne amont.} Chaque pièce est \textbf{mesurable seule} et
+  réutilise du code prouvé.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{10. Plan d'implémentation (étapes 16→20, chacune
+mesurable)}\label{plan-dimpluxe9mentation-uxe9tapes-1620-chacune-mesurable}
+
+Discipline inchangée : un harnais reproductible, des chiffres mesurés,
+commit + STATUS + tests verts à chaque palier ; \textbf{un entraînement
+GPU à la fois} (watchdog).
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Étape 16 --- Modèle de transition action-conditionné.} Module
+  \texttt{agir(etat,\ action)→etat} (d'abord \texttt{etat\ =\ champ} :
+  \texttt{predire\_champ\_sous\_action}), né sur surprise confirmée,
+  entraîné par accélération. \emph{Mesure} : rappel de prédiction par
+  action (comme étape 2a mais conditionné action) ; l'accél. nulle ≈
+  triviale, les autres apprises.
+\item
+  \textbf{Étape 17 --- Pulsions \& objectif dominant.} Vecteur
+  faim/douleur/curiosité/apprentissage/ bullage/temps ; sélection
+  dominante + réflexe (\texttt{decision\_action}). \emph{Mesure} :
+  dynamique des pulsions sur un run, bascule d'objectif à l'hystérésis,
+  réflexe qui court-circuite.
+\item
+  \textbf{Étape 18 --- Déroulé continu.} Boucle MPC : X pas imaginés, 1
+  action réelle, réinjection. L'orchestrateur émet actions+prédictions
+  en flux (\texttt{macro\_pas}+\texttt{trace}). \emph{Mesure} : l'agent
+  agit (≠ immobile) quand la vision statique est maîtrisée ; sucre mangé
+  \textbf{par hasard} non nul (base pour la nuit).
+\item
+  \textbf{Étape 19 --- Planification A*.} \texttt{a\_etoile} sur
+  \texttt{voisins\ =\ agir·𝒜}, \texttt{g} = coût mesuré, \texttt{h} =
+  \texttt{ValeurApprise}. Choix du \textbf{niveau d'abstraction} par
+  \texttt{valeur\ =\ progrès\ −\ λ·coût}. \emph{Mesure} : à h fixée, la
+  longueur/qualité du plan ; préférence effective pour l'état compact
+  quand il suffit.
+\item
+  \textbf{Étape 20 --- Crédit nocturne amont.} Backup TD n-pas + rejeu
+  contrefactuel sur les épisodes « sucre ». \emph{Mesure} : \textbf{la
+  profondeur amont d'orientation correcte croît avec le nombre de nuits}
+  (1→\ldots→6-15) --- la courbe qui prouve la navigation apprise.
+\end{itemize}
+
+Jalon intermédiaire de démonstration : brancher ces objets sur le
+\textbf{viewer v7} (un panneau « pulsions » + l'arbre A* en cours + le
+plan retenu), pour \emph{voir} l'agent délibérer.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{11. Risques \& garde-fous}\label{risques-garde-fous}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Aucun câblage de tâche.} Zéro coordonnée d'objet, zéro
+  distance-au-sucre dans la voie de décision : les pulsions sont des
+  scalaires (faim = compteur interne, douleur = signal), la géométrie
+  reste hors de la boucle (dette §27 tenue).
+\item
+  \textbf{h non admissible.} \texttt{ValeurApprise} est best-first
+  pondéré (Pohl), pas A* admissible : acceptable (on veut vite-et-bon,
+  pas l'optimum garanti). Le budget borné évite les dérives ; l'ancrage
+  au champ rattrape les hallucinations d'état.
+\item
+  \textbf{Explosion malgré tout.} Si l'arbre reste trop large, deux
+  soupapes : réduire 𝒜 exploré au prior de Mode B (top-k actions), et
+  remonter le niveau d'abstraction (coût ↑ décourage le brut). Les deux
+  sont réglables par l'\textbf{auto-réglage §28.4} (étape 15) plutôt
+  qu'à la main.
+\item
+  \textbf{Crédit nocturne instable.} TD sur récompense rare peut
+  diverger : clip de gradient déjà en place
+  (\texttt{clip\_grad\_simulateur}), baseline contrefactuelle à poids
+  figés (garde-fou \texttt{assert} dans \texttt{credit.py}), γ
+  \textless{} 1 pour borner la remontée.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Prochaine action : implémenter l'étape 16 (modèle de transition
+action-conditionné), premier maillon mesurable, en réutilisant
+\texttt{regime.py} (champ→champ) conditionné par l'action.}
+
+\end{document}
