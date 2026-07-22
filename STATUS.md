@@ -120,6 +120,7 @@ Chaque étape a un harnais reproductible. Les chiffres sont mesurés, pas estim�
 | # | Livrable | Harnais | Résultat mesuré |
 |---|---|---|---|
 | 23 | **Perception OBJET** (fondation) ✅ | `python3 -m scl.etape23_perception_objet` | champ → `{(catégorie,position)}` (VQ émergent, catégories pures) ; prédiction T+1 = **décaler les positions par la vitesse**. Rappel **région prévisible = 100 % à toutes les vitesses** (vs 57-84 % en pixels !) ; global 90 % (le résidu = objets entrant par le bord, **plafond info-théorique** du capteur 10×10). Compression **5.4 objets vs 100 pixels** |
+| 24 | **Action = ACCÉLÉRATION + compositionnalité** ✅ | `python3 -m scl.etape24_action_objet` | transition `(E,v,a)→(decaler(E,clip(v+a)),v')`. **`(2,0)=(1,0)∘(1,0)` à 100 %** (la vitesse 2 se simule par double usage du décalage de 1 — aucun module (2,0) dédié) ; multi-pas prévisible **T+1..T+6 = 100→90 %** (vrai déroulé, plus de `(1,0)×10` figé) ; branches (1,0)×4 vs (0,1)×4 = **68 %** de divergence objets → futurs distincts |
 
 Visualisation (viewer **v7**) — 2 commandes :
 ```bash
