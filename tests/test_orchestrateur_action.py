@@ -16,6 +16,22 @@ def test_imitation_apprend_une_action():
     assert orch.choisir(tok, [0, 0]) == 1
 
 
+def test_reinforce_augmente_la_proba_dune_action_recompensee():
+    torch.manual_seed(0)
+    orch = OrchestrateurAction(k_categories=4)
+    tok = torch.zeros((1, orch.f_in), device=DEVICE); tok[0, 2] = 1.0
+    # renforce systématiquement l'action échantillonnée avec un avantage positif quand c'est 3
+    import torch.nn.functional as F
+    def proba3():
+        with torch.no_grad():
+            return float(F.softmax(orch.logits(tok, [0, 0]), 0)[3])
+    p0 = proba3()
+    for _ in range(400):
+        a, logp, ent = orch.echantillonner(tok, [0, 0])
+        orch.pas_renforce([(logp, ent)], avantage=1.0 if a == 3 else -0.2)
+    assert proba3() > p0                              # l'action récompensée devient plus probable
+
+
 def test_gere_ensemble_vide_et_taille_variable():
     orch = OrchestrateurAction(k_categories=4)
     vide = torch.zeros((0, orch.f_in), device=DEVICE)

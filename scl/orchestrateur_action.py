@@ -37,6 +37,7 @@ class OrchestrateurAction(torch.nn.Module):
         self.ff = torch.nn.Sequential(torch.nn.Linear(d, 4 * d), torch.nn.ReLU(), torch.nn.Linear(4 * d, d))
         self.tete = torch.nn.Sequential(torch.nn.Linear(d + 2, d), torch.nn.ReLU(), torch.nn.Linear(d, n_actions))
         self.opt = torch.optim.Adam(self.parameters(), lr=2e-3)
+        self.opt_rl = torch.optim.Adam(self.parameters(), lr=3e-4)   # REINFORCE : LR plus faible
         self.to(DEVICE)
 
     def _attention(self, X):                      # X : (N, d) → (N, d), équivariant
@@ -61,6 +62,33 @@ class OrchestrateurAction(torch.nn.Module):
     def choisir(self, tokens, v):
         with torch.no_grad():
             return int(torch.argmax(self.logits(tokens, v)))
+
+    def echantillonner(self, tokens, v):
+        """Tire une action ~ π (pour REINFORCE) ; rend (indice, log π, entropie) dérivables."""
+        dist = torch.distributions.Categorical(logits=self.logits(tokens, v))
+        a = dist.sample()
+        return int(a), dist.log_prob(a), dist.entropy()
+
+    def pas_renforce(self, trajectoire, avantage, beta_entropie=0.02):
+        """Un pas REINFORCE (LR dédié) sur une trajectoire [(log π, entropie), …] pondérée
+        par l'avantage. Simple ; préférer `pas_renforce_lot` (variance réduite)."""
+        return self.pas_renforce_lot([(trajectoire, avantage)], beta_entropie)
+
+    def pas_renforce_lot(self, lot, beta_entropie=0.02):
+        """REINFORCE par LOT : moyenne sur les épisodes de −avantage·Σlogπ − β·ΣH, avec un
+        LR dédié plus faible. Le lot + avantages normalisés (par l'appelant) réduisent la
+        variance qui, sinon, fait OUBLIER l'imitation (écueil mesuré étape 27 v1)."""
+        self.opt_rl.zero_grad()
+        perte = torch.zeros((), device=DEVICE)
+        for trajectoire, avantage in lot:
+            logs = torch.stack([lp for lp, _ in trajectoire]).sum()
+            ent = torch.stack([h for _, h in trajectoire]).sum()
+            perte = perte + (-avantage * logs - beta_entropie * ent)
+        perte = perte / max(1, len(lot))
+        perte.backward()
+        torch.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
+        self.opt_rl.step()
+        return float(perte.detach())
 
     def imiter(self, lot):
         """lot : liste de (tokens, v, action_idx) — imite la première action d'A*."""
