@@ -21,6 +21,8 @@ ACTIONS_UTILES = {
     "meta", "phase", "programme_choisi",
     # champ VU vs PRÉVU + état des modules au fil du temps
     "champ", "modules_etat",
+    # agent objet (perçoit → prédit → planifie A* → agit) — étape 28
+    "agent",
     # cycle de vie des modules-régime
     "naissance_module_regime", "verrouillage_module_regime",
     # graphe de branchement de l'orchestrateur (Mode A)

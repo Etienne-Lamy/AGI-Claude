@@ -90,6 +90,18 @@
     </div>
     <div class="hint">Quand PRÉVU rejoint VU, le module actif a appris la dynamique du régime
       courant. Le rappel (en haut à droite) est la part d'objets correctement prédits.</div>
+    <div id="agentbar" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--bord);border-radius:6px;background:#0c0e13">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--sourd);margin-bottom:6px">Agent — perçoit · prédit · planifie A* · agit</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
+        <span>mode <b id="a-mode" style="color:var(--acc)">–</b></span>
+        <span>vitesse <b id="a-v">–</b></span>
+        <span>action <b id="a-a">–</b></span>
+        <span>objets <b id="a-n">0</b></span>
+        <span>🍬 <b id="a-su" style="color:var(--ok)">0</b></span>
+        <span>🪵 <b id="a-ba" style="color:var(--warn)">0</b></span>
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:var(--sourd)">plan A* : <span id="a-plan">–</span></div>
+    </div>
   </div>
 
   <div class="pan" id="p-graphe">
@@ -249,6 +261,7 @@ function traite(rec){
   }
   else if(a==="champ"){ S.champ={vu:rec.vu, prevu:rec.prevu, rappel:rec.rappel||0,
                                  regime:rec.regime, module:rec.module}; S.regime=rec.regime??S.regime; }
+  else if(a==="agent"){ S.agent=rec; }
   else if(a==="programme_evalue"){ S.progs[rec.chaine.join(">")]=
       {chaine:rec.chaine, G:rec.G||0, cout:rec.cout||0, valeur:rec.valeur||0}; }
   else if(a==="programme_choisi"){ S.chosen=rec.chaine; S.best=rec.chaine.join(" → "); }
@@ -259,7 +272,20 @@ function renduEntete(){
   document.getElementById("s-reg").textContent=S.regime;
   document.getElementById("s-best").textContent=S.best;
 }
-function rendu(){ renduChamp(); renduModules(); renduGraphe(); renduEntete(); }
+function renduAgent(){
+  const g=S.agent; const bar=document.getElementById("agentbar");
+  if(!g){ bar.style.display="none"; return; }
+  bar.style.display="block";
+  document.getElementById("a-mode").textContent=g.mode||"–";
+  document.getElementById("a-v").textContent=(g.vitesse||[]).join(",");
+  document.getElementById("a-a").textContent=(g.acte||[]).join(",");
+  document.getElementById("a-n").textContent=g.n_objets??0;
+  document.getElementById("a-su").textContent=g.sucres??0;
+  document.getElementById("a-ba").textContent=g.batons??0;
+  const plan=(g.plan||[]).map(x=>"("+x.join(",")+")").join(" → ");
+  document.getElementById("a-plan").textContent=plan||"(aucun sucre en vue → exploration)";
+}
+function rendu(){ renduChamp(); renduAgent(); renduModules(); renduGraphe(); renduEntete(); }
 
 document.getElementById("zoom").addEventListener("input", e=>{
   document.getElementById("zoomlbl").textContent=e.target.value+" px"; renduChamp();
